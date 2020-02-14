@@ -1,11 +1,12 @@
 cmake_minimum_required(VERSION 2.8)
 
+include(GNUInstallDirs)
 include(FindPkgConfig)
 pkg_check_modules(YAML yaml-0.1)
 
 include_directories(${YAML_INCLUDE_DIRS})
 
-add_library(yaml-path yaml-path.c)
+add_library(yaml-path SHARED yaml-path.c)
 target_link_libraries(yaml-path ${YAML_LIBRARIES})
 
 add_executable(ya yaml.c)
@@ -14,8 +15,10 @@ target_link_libraries(ya yaml-path)
 add_executable(yamlp yamlp.c)
 target_link_libraries(yamlp yaml-path)
 
-install(TARGETS ya RUNTIME DESTINATION bin)
-install(TARGETS yamlp RUNTIME DESTINATION bin)
+install(TARGETS yaml-path LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
+install(TARGETS ya RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+install(TARGETS yamlp RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+install(FILES yaml-path.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
 add_executable(test-path-segments test-path-segments.c yaml-path.c)
 
