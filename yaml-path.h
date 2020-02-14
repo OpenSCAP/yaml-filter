@@ -1,0 +1,46 @@
+#ifndef YAML_PATH_H
+#define YAML_PATH_H
+
+#include <yaml.h>
+
+
+typedef struct yaml_path yaml_path_t;
+
+typedef enum yaml_path_error_type {
+	YAML_PATH_ERROR_NONE,
+	YAML_PATH_ERROR_PARSE,
+} yaml_path_error_type_t;
+
+typedef struct yaml_path_error {
+	yaml_path_error_type_t type;
+	const char *message;
+	const char *context;
+	size_t pos;
+} yaml_path_error_t;
+
+typedef enum yaml_path_filter_mode {
+	YAML_PATH_FILTER_RETURN_ALL,
+	YAML_PATH_FILTER_RETURN_SHALLOW,
+} yaml_path_filter_mode_t;
+
+
+yaml_path_t*
+yaml_path_create (void);
+
+int
+yaml_path_parse (yaml_path_t *path, char *s_path);
+
+void
+yaml_path_destroy (yaml_path_t *path);
+
+const yaml_path_error_t*
+yaml_path_error_get (yaml_path_t *path);
+
+int
+yaml_path_filter_event (yaml_path_t *path, yaml_parser_t *parser, yaml_event_t *event, yaml_path_filter_mode_t mode);
+
+size_t
+yaml_path_snprint (yaml_path_t *path, char *s, size_t max_len);
+
+#endif//YAML_PATH_H
+
