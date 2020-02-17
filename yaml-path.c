@@ -441,7 +441,7 @@ yaml_path_filter_event (yaml_path_t *path, yaml_parser_t *parser, yaml_event_t *
 						current_section->valid = current_section->next_valid;
 						current_section->next_valid = 0;
 					} else {
-						current_section->next_valid = !strncmp(current_section->data.key, (const char *)event->data.scalar.value, strlen(current_section->data.key));
+						current_section->next_valid = !strcmp(current_section->data.key, (const char *)event->data.scalar.value);
 						current_section->valid = 0;
 					}
 				} else {
