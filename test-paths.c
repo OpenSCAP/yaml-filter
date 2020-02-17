@@ -151,15 +151,15 @@ error:
 void
 yp_test (char *path, char *yaml_exp)
 {
-	printf("%s", path);
+	printf("%s ", path);
 	if (!yp_run(path)) {
 		// There is '\n' at the end of the emitted document
 		yaml_out[strlen(yaml_out)-1] = '\0';
 		if (!strcmp(yaml_exp, yaml_out)) {
-			printf(" (%s): OK\n", yaml_exp);
+			printf("(%s): OK\n", yaml_exp);
 			return;
 		}
-		printf(ASCII_ERR" (%s != %s)"ASCII_RST": FAILED\n", yaml_exp, yaml_out);
+		printf(ASCII_ERR"(%s != %s)"ASCII_RST": FAILED\n", yaml_exp, yaml_out);
 	}
 	test_result++;
 }
@@ -180,7 +180,10 @@ int main (int argc, char *argv[])
 					"[4, 5, 6, 7, 8, 9],"
 					"{'k': 'val', 0: 0}"
 				"]"
-			"}"
+			"},"
+			"second: ["
+				"{'abc': 1, 'abcdef': 2}"
+			"]"
 		"}";
 
 	//       Path                         Expected filtered YAML result
@@ -202,6 +205,7 @@ int main (int argc, char *argv[])
 	yp_test(".first.Arr[3][1::2]",       "[5, 7, 9]");
 	yp_test(".first.Arr[3][::2]",        "[4, 6, 8]");
 	yp_test(".first.Arr[3][:4:2]",       "[4, 6]");
+	yp_test(".second[0].abc",               "1");
 
 	mode = YAML_PATH_FILTER_RETURN_SHALLOW;
 	yp_test(".first",                    "{}");
