@@ -191,7 +191,7 @@ int main (int argc, char *argv[])
 				"]"
 			"},"
 			"second: ["
-				"{'abc': 1, 'abcdef': 2}"
+				"{'abc': &anc 1, 'abcdef': 2, 'z': *anc}"
 			"]"
 		"}";
 
@@ -214,7 +214,9 @@ int main (int argc, char *argv[])
 	yp_test(".first.Arr[3][1::2]",       "[5, 7, 9]");
 	yp_test(".first.Arr[3][::2]",        "[4, 6, 8]");
 	yp_test(".first.Arr[3][:4:2]",       "[4, 6]");
-	yp_test(".second[0].abc",            "1");
+	yp_test(".second[0].abc",            "&anc 1");
+	yp_test(".second[0][&anc]",          "&anc 1");
+	yp_test(".second[0].z",              "*anc");
 
 	mode = YAML_PATH_FILTER_RETURN_SHALLOW;
 	yp_test(".first",                    "{}");

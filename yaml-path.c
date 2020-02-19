@@ -320,14 +320,16 @@ yaml_path_prev_section_is_valid (yaml_path_t *path)
 }
 
 static int
-yaml_path_last_section_is_valid (yaml_path_t *path)
+yaml_path_all_sections_are_valid (yaml_path_t *path)
 {
 	if (path == NULL)
 		return 0;
-	yaml_path_section_t *sec = yaml_path_section_get_last(path);
-	if (sec == NULL)
-		return -1;
-	return sec->valid;
+	int valid = 1;
+	yaml_path_section_t *el;
+	TAILQ_FOREACH(el, &path->sections_list, entries) {
+		valid = el->valid && valid;
+	}
+	return valid;
 }
 
 static int
@@ -428,11 +430,27 @@ yaml_path_filter_event (yaml_path_t *path, yaml_parser_t *parser, yaml_event_t *
 	if (path == NULL || parser == NULL || event == NULL)
 		goto exit;
 
+	const char *anchor = NULL;
+	switch(event->type) {
+	case YAML_MAPPING_START_EVENT:
+		anchor = (const char *)event->data.mapping_start.anchor;
+		break;
+	case YAML_SEQUENCE_START_EVENT:
+		anchor = (const char *)event->data.sequence_start.anchor;
+		break;
+	case YAML_SCALAR_EVENT:
+		anchor = (const char *)event->data.scalar.anchor;
+		break;
+	default:
+		break;
+	}
+
 	yaml_path_section_t *current_section = yaml_path_section_get_current(path);
 	if (current_section) {
 		switch (event->type) {
 		case YAML_MAPPING_START_EVENT:
 		case YAML_SEQUENCE_START_EVENT:
+		case YAML_ALIAS_EVENT:
 		case YAML_SCALAR_EVENT:
 			switch (current_section->node_type) {
 			case YAML_MAPPING_NODE:
@@ -444,6 +462,8 @@ yaml_path_filter_event (yaml_path_t *path, yaml_parser_t *parser, yaml_event_t *
 						current_section->next_valid = !strcmp(current_section->data.key, (const char *)event->data.scalar.value);
 						current_section->valid = 0;
 					}
+				} else if (current_section->type == YAML_PATH_SECTION_ANCHOR && anchor != NULL) {
+					current_section->valid = !strcmp(current_section->data.key, anchor);
 				} else {
 					current_section->valid = 0;
 				}
@@ -455,6 +475,8 @@ yaml_path_filter_event (yaml_path_t *path, yaml_parser_t *parser, yaml_event_t *
 					current_section->valid = current_section->data.slice.start <= current_section->counter &&
 					                         current_section->data.slice.end > current_section->counter &&
 					                         (current_section->data.slice.start + current_section->counter) % current_section->data.slice.stride == 0;
+				} else if (current_section->type == YAML_PATH_SECTION_ANCHOR && anchor != NULL) {
+					current_section->valid = !strcmp(current_section->data.key, anchor);
 				} else {
 					current_section->valid = 0;
 				}
@@ -466,6 +488,7 @@ yaml_path_filter_event (yaml_path_t *path, yaml_parser_t *parser, yaml_event_t *
 		default:
 			break;
 		}
+		//TODO: DEBUG printf("iv: %d, t: %d, nt: %d, lev: %d\n", current_section->valid, current_section->type, current_section->node_type, current_section->level);
 	}
 
 	switch (event->type) {
@@ -484,7 +507,7 @@ yaml_path_filter_event (yaml_path_t *path, yaml_parser_t *parser, yaml_event_t *
 		} else {
 			if (path->current_level > path->sections_count)
 				if ((!current_section && mode == YAML_PATH_FILTER_RETURN_ALL) || path->current_level == path->sections_count)
-					res = yaml_path_last_section_is_valid(path);
+					res = yaml_path_all_sections_are_valid(path);
 		};
 		path->current_level++;
 		current_section = yaml_path_section_get_current(path);
@@ -509,14 +532,15 @@ yaml_path_filter_event (yaml_path_t *path, yaml_parser_t *parser, yaml_event_t *
 			res = current_section->valid && yaml_path_prev_section_is_valid(path);
 		} else {
 			if ((!current_section && mode == YAML_PATH_FILTER_RETURN_ALL) || path->current_level == path->sections_count) {
-				res = yaml_path_last_section_is_valid(path);
+				res = yaml_path_all_sections_are_valid(path);
 			}
 		}
 		break;
+	case YAML_ALIAS_EVENT:
 	case YAML_SCALAR_EVENT:
 		if (!current_section) {
 			if (mode == YAML_PATH_FILTER_RETURN_ALL || path->current_level == path->sections_count)
-				res = yaml_path_last_section_is_valid(path);
+				res = yaml_path_all_sections_are_valid(path);
 		} else {
 			res = current_section->valid && yaml_path_prev_section_is_valid(path) && yaml_path_section_current_is_last(path);
 		}
