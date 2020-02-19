@@ -1,9 +1,19 @@
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "yaml-path.h"
 
+static void
+rstrip (char *s)
+{
+	char *pos = s + strlen(s) - 1;
+	while (pos > s && isspace((unsigned char)*pos)) {
+		*pos = 0;
+		pos--;
+	}
+}
 
 static const char*
 yp_event_name (yaml_event_type_t event_type)
@@ -153,8 +163,7 @@ yp_test (char *path, char *yaml_exp)
 {
 	printf("%s ", path);
 	if (!yp_run(path)) {
-		// There is '\n' at the end of the emitted document
-		yaml_out[strlen(yaml_out)-1] = '\0';
+		rstrip(yaml_out);
 		if (!strcmp(yaml_exp, yaml_out)) {
 			printf("(%s): OK\n", yaml_exp);
 			return;
@@ -182,7 +191,7 @@ int main (int argc, char *argv[])
 				"]"
 			"},"
 			"second: ["
-				"{'abc': 1, 'abcdef': 2}"
+				"{'abc': &anc 1, 'abcdef': 2, 'z': *anc}"
 			"]"
 		"}";
 
@@ -205,7 +214,9 @@ int main (int argc, char *argv[])
 	yp_test(".first.Arr[3][1::2]",       "[5, 7, 9]");
 	yp_test(".first.Arr[3][::2]",        "[4, 6, 8]");
 	yp_test(".first.Arr[3][:4:2]",       "[4, 6]");
-	yp_test(".second[0].abc",               "1");
+	yp_test(".second[0].abc",            "&anc 1");
+	yp_test(".second[0][&anc]",          "&anc 1");
+	yp_test(".second[0].z",              "*anc");
 
 	mode = YAML_PATH_FILTER_RETURN_SHALLOW;
 	yp_test(".first",                    "{}");
