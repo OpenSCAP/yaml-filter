@@ -8,8 +8,10 @@
 static void
 rstrip (char *s)
 {
+	// This will strip whitespace and explicit document ending
+	// to cope with emitter behavior for libyaml < 0.2
 	char *pos = s + strlen(s) - 1;
-	while (pos > s && isspace((unsigned char)*pos)) {
+	while (pos > s && (isspace((unsigned char)*pos) || *pos == '.')) {
 		*pos = 0;
 		pos--;
 	}
