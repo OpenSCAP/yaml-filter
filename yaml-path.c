@@ -320,6 +320,20 @@ yaml_path_prev_section_is_valid (yaml_path_t *path)
 }
 
 static int
+yaml_path_prev_sections_are_valid (yaml_path_t *path)
+{
+	if (path == NULL)
+		return 0;
+	int valid = 1;
+	yaml_path_section_t *el;
+	TAILQ_FOREACH(el, &path->sections_list, entries) {
+		if (el->level < path->current_level)
+			valid = el->valid && valid;
+	}
+	return valid;
+}
+
+static int
 yaml_path_all_sections_are_valid (yaml_path_t *path)
 {
 	if (path == NULL)
@@ -542,7 +556,7 @@ yaml_path_filter_event (yaml_path_t *path, yaml_parser_t *parser, yaml_event_t *
 			if (mode == YAML_PATH_FILTER_RETURN_ALL || path->current_level == path->sections_count)
 				res = yaml_path_all_sections_are_valid(path);
 		} else {
-			res = current_section->valid && yaml_path_prev_section_is_valid(path) && yaml_path_section_current_is_last(path);
+			res = current_section->valid && yaml_path_prev_sections_are_valid(path) && yaml_path_section_current_is_last(path);
 		}
 		break;
 	default:
