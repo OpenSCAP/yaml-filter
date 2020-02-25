@@ -43,19 +43,21 @@ void print_event(yaml_event_t *event)
 		break;
 	case YAML_ALIAS_EVENT:
 		indent(level);
-		printf("alias-event &\n");
+		printf("alias-event * (anc=\"%s\")\n", STRVAL(event->data.scalar.anchor));
 		break;
 	case YAML_SCALAR_EVENT:
 		indent(level);
-		printf("= scalar-event (val=\"%s\", l=%d, t=%s, pl_impl=%d, q_impl=%d, st=%d)\n",
+		printf("= scalar-event (anc=\"%s\" val=\"%s\", l=%d, t=%s, pl_impl=%d, q_impl=%d, st=%d)\n",
+		       STRVAL(event->data.scalar.anchor),
 		       STRVAL(event->data.scalar.value),
 		       (int)event->data.scalar.length,
 		       event->data.scalar.tag,
-			   event->data.scalar.plain_implicit, event->data.scalar.quoted_implicit, event->data.scalar.style);
+		       event->data.scalar.plain_implicit, event->data.scalar.quoted_implicit, event->data.scalar.style);
 		break;
 	case YAML_SEQUENCE_START_EVENT:
 		indent(level++);
-		printf("[ sequence-start-event (t=%s)\n",
+		printf("[ sequence-start-event (anc=\"%s\", t=%s)\n",
+			   STRVAL(event->data.sequence_start.anchor),
 		       event->data.sequence_start.tag);
 		break;
 	case YAML_SEQUENCE_END_EVENT:
@@ -111,16 +113,44 @@ int main(int argc, char *argv[])
 	//yaml_path_parse(yp, ".fruit.Oop[1]");
 	//yaml_path_parse(yp, ".first.Arr[:2][0]"); //.Arr[2][0]
 	//yaml_path_parse(yp, ".first.Arr[3][:]");
-	//yaml_path_parse(yp, ".first");
+	//yaml_path_parse(yp, ".first.Map");
 	//yaml_path_parse(yp, ".first.Arr[:].k");
-	yaml_path_parse(yp, ".first.Arr[:][2]");
+	//yaml_path_parse(yp, ".first.Arr[:][2]");
+	//yaml_path_parse(yp, ".metadata.name");
+	//yaml_path_parse(yp, ".spec.outputs[0:2].name");
+	//yaml_path_parse(yp, ".second[0].abc");
+	//yaml_path_parse(yp, "&anc[0]");
+	yaml_path_parse(yp, ".first.Map");
 
 	//const char *yaml = "2";
-	const char *yaml = "{first: {'Map': {1: '1'}, 'Nop': 'b', 'Yep': '2', 'Arr': [[11,12],2,[31,32],[4, 5, 6],{'k': 1, 0: 0}]}}";
-	printf("%s\n\n", yaml);
+	//const char *yaml = "{'el': {'Z': &anc [{'key': 0}, {'item': 1}]}, first: {'Map': &anc {1: '1'}, 'Nop': 'b', 'Yep': '2', 'Arr': [[11,12],2,[31,32],[4, 5, 6],{'k': 1, 0: 0}]}}";
+	const char *yaml =
+		"{"
+			"first: {"
+				"'Map': {1: '1'},"
+				"'Nop': 0,"
+				"'Yep': '1',"
+				"'Arr': ["
+					"[11, 12],"
+					"2,"
+					"['31', '32'],"
+					"[4, 5, 6, 7, 8, 9],"
+					"{'k': 'val', 0: 0}"
+				"]"
+			"},"
+			"second: ["
+				"{'abc': &anc [1, 2], 'abcdef': 2, 'z': *anc},"
+				"{'abc': [3, 4], 'abcdef': 4, 'z': 'zzz'}"
+			"]"
+		"}";
+
+	char ypath[255] = {0};
+	yaml_path_snprint (yp, ypath, 255);
+	printf("%s\n", yaml);
+	printf("%s\n\n", ypath);
 	
 	yaml_parser_initialize(&parser);
-	//yaml_parser_set_input_file(&parser, stdin);
+	//yaml_parser_set_input_file(&parser, fopen("../openshift-logging-1.yaml", "r"));
 	yaml_parser_set_input_string(&parser, (const unsigned char*)yaml, strlen(yaml));
 
 	do {

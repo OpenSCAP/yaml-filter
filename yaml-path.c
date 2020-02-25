@@ -1,7 +1,9 @@
 #include <stdlib.h>
+#include <stdbool.h>
 #include <string.h>
-#include <stdio.h>
 #include <sys/queue.h>
+#include <assert.h>
+
 #include <yaml.h>
 
 #include "yaml-path.h"
@@ -13,10 +15,11 @@
 
 
 typedef enum yaml_path_section_type {
+	YAML_PATH_SECTION_ROOT,
+	YAML_PATH_SECTION_ANCHOR,
 	YAML_PATH_SECTION_KEY,
 	YAML_PATH_SECTION_INDEX,
 	YAML_PATH_SECTION_SLICE,
-	YAML_PATH_SECTION_ANCHOR,
 } yaml_path_section_type_t;
 
 typedef struct yaml_path_section {
@@ -32,8 +35,8 @@ typedef struct yaml_path_section {
 
 	yaml_node_type_t node_type;
 	int counter;
-	int valid;
-	int next_valid;
+	bool valid;
+	bool next_valid;
 } yaml_path_section_t;
 
 typedef TAILQ_HEAD(path_section_list, yaml_path_section) path_section_list_t;
@@ -41,9 +44,10 @@ typedef TAILQ_HEAD(path_section_list, yaml_path_section) path_section_list_t;
 typedef struct yaml_path {
 	path_section_list_t sections_list;
 	size_t sections_count;
+	size_t sequence_level;
 
 	size_t current_level;
-	size_t sequence_level;
+	size_t start_level;
 
 	yaml_path_error_t error;
 } yaml_path_t;
@@ -52,8 +56,7 @@ typedef struct yaml_path {
 static void
 yaml_path_error_set (yaml_path_t *path, yaml_path_error_type_t error_type, const char *message, size_t pos)
 {
-	if (path == NULL)
-		return;
+	assert(path != NULL);
 	path->error.type = error_type;
 	path->error.message = message;
 	path->error.pos = pos;
@@ -62,8 +65,7 @@ yaml_path_error_set (yaml_path_t *path, yaml_path_error_type_t error_type, const
 static void
 yaml_path_sections_remove (yaml_path_t *path)
 {
-	if (path == NULL)
-		return;
+	assert(path != NULL);
 	while (!TAILQ_EMPTY(&path->sections_list)) {
 		yaml_path_section_t *el = TAILQ_FIRST(&path->sections_list);
 		TAILQ_REMOVE(&path->sections_list, el, entries);
@@ -90,9 +92,12 @@ static yaml_path_section_t*
 yaml_path_section_create (yaml_path_t *path, yaml_path_section_type_t section_type)
 {
 	yaml_path_section_t *el = malloc(sizeof(*el));
+	assert(el != NULL);
+	memset(el, 0, sizeof(*el));
 	path->sections_count++;
 	el->level = path->sections_count;
 	el->type = section_type;
+	el->node_type = YAML_SCALAR_NODE;
 	TAILQ_INSERT_TAIL(&path->sections_list, el, entries);
 	if (el->type == YAML_PATH_SECTION_SLICE && !path->sequence_level) {
 		path->sequence_level = el->level;
@@ -103,18 +108,19 @@ yaml_path_section_create (yaml_path_t *path, yaml_path_section_type_t section_ty
 static size_t
 yaml_path_section_snprint (yaml_path_section_t *section, char *s, size_t max_len)
 {
+	assert(section != NULL);
 	if (s == NULL)
 		return -1;
-	if (section == NULL)
-		return 0;
-
 	size_t len = 0;
 	switch (section->type) {
+	case YAML_PATH_SECTION_ROOT:
+		len = snprintf(s, max_len, "$");
+		break;
 	case YAML_PATH_SECTION_KEY:
 		len = snprintf(s, max_len, ".%s", section->data.key);
 		break;
 	case YAML_PATH_SECTION_ANCHOR:
-		len = snprintf(s, max_len, "[&%s]", section->data.anchor);
+		len = snprintf(s, max_len, "&%s", section->data.anchor);
 		break;
 	case YAML_PATH_SECTION_INDEX:
 		len = snprintf(s, max_len, "[%d]", section->data.index);
@@ -134,6 +140,8 @@ _parse (yaml_path_t *path, char *s_path) {
 	char *sp = s_path;
 	char *spe = NULL;
 
+	assert(path != NULL);
+
 	if (s_path == NULL || !s_path[0]) {
 		yaml_path_error_set(path, YAML_PATH_ERROR_PARSE, "Path is empty", 0);
 		return;
@@ -143,6 +151,9 @@ _parse (yaml_path_t *path, char *s_path) {
 		switch (*sp) {
 		case '.':
 		case '[':
+			if (path->sections_count == 0) {
+				yaml_path_section_create(path, YAML_PATH_SECTION_ROOT);
+			}
 			if (*sp == '.') {
 				// Key
 				spe = sp + 1;
@@ -157,23 +168,7 @@ _parse (yaml_path_t *path, char *s_path) {
 				sp = spe-1;
 			} else if (*sp == '[') {
 				spe = sp+1;
-				if (*spe == '&') {
-					// Anchor
-					sp = spe;
-					while (*spe != ']' && *spe != '\0')
-						spe++;
-					if (spe == sp+1) {
-						yaml_path_error_set(path, YAML_PATH_ERROR_PARSE, "Segment anchor is missing", sp - s_path);
-						goto error;
-					}
-					if (*spe == '\0') {
-						yaml_path_error_set(path, YAML_PATH_ERROR_PARSE, "Segment anchor is invalid (unxepected end of string, missing ']')", sp - s_path);
-						goto error;
-					}
-					yaml_path_section_t *sec = yaml_path_section_create(path, YAML_PATH_SECTION_ANCHOR);
-					sec->data.anchor = strndup(sp + 1, spe-sp - 1);
-					sp = spe;
-				} else if (*spe == '\'') {
+				if (*spe == '\'') {
 					// Key
 					sp = spe;
 					spe++;
@@ -251,18 +246,25 @@ _parse (yaml_path_t *path, char *s_path) {
 			break;
 		default:
 			if (path->sections_count == 0) {
-				// Key
 				spe = sp + 1;
-				if (*sp == '$' && (*spe == '.' || *spe == '[')) {
-					// Ignore leading '$'
-					// TODO: Should we do this?
-				} else {
+				if (*sp == '$' && (*spe == '.' || *spe == '[' || *spe == '\0')) {
+					yaml_path_section_t *sec = yaml_path_section_create(path, YAML_PATH_SECTION_ROOT);
+				} else if (*sp == '&') {
+					// Anchor
+					sp++;
 					while (*spe != '.' && *spe != '[' && *spe != '\0')
 						spe++;
-					yaml_path_section_t *sec = yaml_path_section_create(path, YAML_PATH_SECTION_KEY);
+					yaml_path_section_t *sec = yaml_path_section_create(path, YAML_PATH_SECTION_ANCHOR);
+					sec->data.anchor = strndup(sp, spe-sp);
+				} else {
+					// Key
+					while (*spe != '.' && *spe != '[' && *spe != '\0')
+						spe++;
+					yaml_path_section_t *sec = yaml_path_section_create(path, YAML_PATH_SECTION_ROOT);
+					sec = yaml_path_section_create(path, YAML_PATH_SECTION_KEY);
 					sec->data.key = strndup(sp, spe-sp);
-					sp = spe-1;
 				}
+				sp = spe-1;
 			}
 			break;
 		}
@@ -282,8 +284,7 @@ error:
 static yaml_path_section_t*
 yaml_path_section_get_at_level (yaml_path_t *path, size_t level)
 {
-	if (path == NULL)
-		return NULL;
+	assert(path != NULL);
 	yaml_path_section_t *el;
 	TAILQ_FOREACH(el, &path->sections_list, entries) {
 		if (el->level == level)
@@ -293,52 +294,59 @@ yaml_path_section_get_at_level (yaml_path_t *path, size_t level)
 }
 
 static yaml_path_section_t*
-yaml_path_section_get_last (yaml_path_t *path)
+yaml_path_section_get_first (yaml_path_t *path)
 {
-	if (path == NULL)
-		return NULL;
-	return yaml_path_section_get_at_level(path, path->sections_count);
+	assert(path != NULL);
+	return yaml_path_section_get_at_level(path, 1);
 }
 
 static yaml_path_section_t*
 yaml_path_section_get_current (yaml_path_t *path)
 {
-	if (path == NULL)
+	assert(path != NULL);
+	if (!path->start_level)
 		return NULL;
-	return yaml_path_section_get_at_level(path, path->current_level);
+	return yaml_path_section_get_at_level(path, path->current_level - path->start_level + 1);
 }
 
-static int
-yaml_path_prev_section_is_valid (yaml_path_t *path)
+static bool
+yaml_path_sections_prev_are_valid (yaml_path_t *path)
 {
-	if (path == NULL)
-		return 0;
-	yaml_path_section_t *sec = yaml_path_section_get_at_level(path, path->current_level-1);
-	if (sec == NULL)
-		return -1;
-	return sec->valid;
-}
-
-static int
-yaml_path_prev_sections_are_valid (yaml_path_t *path)
-{
-	if (path == NULL)
-		return 0;
-	int valid = 1;
+	assert(path != NULL);
+	int valid = true;
 	yaml_path_section_t *el;
 	TAILQ_FOREACH(el, &path->sections_list, entries) {
-		if (el->level < path->current_level)
+		if (el->level < path->current_level - path->start_level + 1)
 			valid = el->valid && valid;
 	}
 	return valid;
 }
 
-static int
-yaml_path_all_sections_are_valid (yaml_path_t *path)
+static bool
+yaml_path_section_current_is_last (yaml_path_t *path)
 {
-	if (path == NULL)
-		return 0;
-	int valid = 1;
+	assert(path != NULL);
+	yaml_path_section_t *sec = yaml_path_section_get_current(path);
+	if (sec == NULL)
+		return false;
+	return sec->level == path->sections_count;
+}
+
+static bool
+yaml_path_section_current_is_mandatory_sequence (yaml_path_t *path)
+{
+	assert(path != NULL);
+	yaml_path_section_t *sec = yaml_path_section_get_current(path);
+	if (sec == NULL)
+		return false;
+	return (sec->type == YAML_PATH_SECTION_SLICE && sec->level == path->sequence_level);
+}
+
+static bool
+yaml_path_is_valid (yaml_path_t *path)
+{
+	assert(path != NULL);
+	bool valid = true;
 	yaml_path_section_t *el;
 	TAILQ_FOREACH(el, &path->sections_list, entries) {
 		valid = el->valid && valid;
@@ -346,24 +354,6 @@ yaml_path_all_sections_are_valid (yaml_path_t *path)
 	return valid;
 }
 
-static int
-yaml_path_section_current_is_last (yaml_path_t *path)
-{
-	if (path == NULL)
-		return 0;
-	return path->current_level == path->sections_count;
-}
-
-static int
-yaml_path_section_current_is_mandatory_sequence (yaml_path_t *path)
-{
-	if (path == NULL)
-		return 0;
-	yaml_path_section_t *sec = yaml_path_section_get_current(path);
-	if (sec == NULL)
-		return 0;
-	return (sec->type == YAML_PATH_SECTION_SLICE && path->current_level == path->sequence_level);
-}
 
 /* Public */
 
@@ -372,12 +362,9 @@ yaml_path_create (void)
 {
 	yaml_path_t *ypath = malloc(sizeof(*ypath));
 
-	if (ypath != NULL) {
-		TAILQ_INIT(&ypath->sections_list);
-		ypath->sections_count = 0;
-		ypath->sequence_level = 0;
-		ypath->current_level = 0;
-	}
+	assert(ypath != NULL);
+	memset (ypath, 0, sizeof(*ypath));
+	TAILQ_INIT(&ypath->sections_list);
 
 	return ypath;
 }
@@ -427,12 +414,10 @@ yaml_path_snprint (yaml_path_t *path, char *s, size_t max_len)
 		return 0;
 
 	size_t len = 0;
-
 	yaml_path_section_t *el;
 	TAILQ_FOREACH(el, &path->sections_list, entries) {
 		len += yaml_path_section_snprint(el, s + (len < max_len ? len : max_len), max_len - (len < max_len ? len : max_len));
 	}
-
 	return len;
 }
 
@@ -440,11 +425,11 @@ int
 yaml_path_filter_event (yaml_path_t *path, yaml_parser_t *parser, yaml_event_t *event, yaml_path_filter_mode_t mode)
 {
 	int res = 0;
+	const char *anchor = NULL;
 
 	if (path == NULL || parser == NULL || event == NULL)
 		goto exit;
 
-	const char *anchor = NULL;
 	switch(event->type) {
 	case YAML_MAPPING_START_EVENT:
 		anchor = (const char *)event->data.mapping_start.anchor;
@@ -459,27 +444,55 @@ yaml_path_filter_event (yaml_path_t *path, yaml_parser_t *parser, yaml_event_t *
 		break;
 	}
 
+	if (!path->start_level) {
+		switch (yaml_path_section_get_first(path)->type) {
+		case YAML_PATH_SECTION_ROOT:
+			if (event->type == YAML_DOCUMENT_START_EVENT) {
+				path->start_level = 1;
+				yaml_path_section_get_first(path)->valid = true;
+			}
+			break;
+		case YAML_PATH_SECTION_ANCHOR:
+			if (anchor != NULL) {
+				if (!strcmp(yaml_path_section_get_first(path)->data.anchor, anchor)) {
+					path->start_level = path->current_level;
+					if (yaml_path_section_get_current(path))
+						yaml_path_section_get_current(path)->node_type = YAML_SCALAR_NODE;
+				}
+			}
+			break;
+		default:
+			//TODO: This path is invalid
+			break;
+		}
+	} else {
+		//TODO: ?
+	}
+
 	yaml_path_section_t *current_section = yaml_path_section_get_current(path);
-	if (current_section) {
+	if (!current_section) {
+	} else {
 		switch (event->type) {
+		case YAML_DOCUMENT_START_EVENT:
 		case YAML_MAPPING_START_EVENT:
 		case YAML_SEQUENCE_START_EVENT:
 		case YAML_ALIAS_EVENT:
 		case YAML_SCALAR_EVENT:
 			switch (current_section->node_type) {
+			case YAML_SCALAR_NODE:
+				current_section->valid = true;
+				break;
 			case YAML_MAPPING_NODE:
 				if (current_section->type == YAML_PATH_SECTION_KEY) {
 					if (current_section->counter % 2) {
 						current_section->valid = current_section->next_valid;
-						current_section->next_valid = 0;
+						current_section->next_valid = false;
 					} else {
 						current_section->next_valid = !strcmp(current_section->data.key, (const char *)event->data.scalar.value);
-						current_section->valid = 0;
+						current_section->valid = false;
 					}
-				} else if (current_section->type == YAML_PATH_SECTION_ANCHOR && anchor != NULL) {
-					current_section->valid = !strcmp(current_section->data.key, anchor);
 				} else {
-					current_section->valid = 0;
+					current_section->valid = false;
 				}
 				break;
 			case YAML_SEQUENCE_NODE:
@@ -489,10 +502,8 @@ yaml_path_filter_event (yaml_path_t *path, yaml_parser_t *parser, yaml_event_t *
 					current_section->valid = current_section->data.slice.start <= current_section->counter &&
 					                         current_section->data.slice.end > current_section->counter &&
 					                         (current_section->data.slice.start + current_section->counter) % current_section->data.slice.stride == 0;
-				} else if (current_section->type == YAML_PATH_SECTION_ANCHOR && anchor != NULL) {
-					current_section->valid = !strcmp(current_section->data.key, anchor);
 				} else {
-					current_section->valid = 0;
+					current_section->valid = false;
 				}
 				break;
 			default:
@@ -502,31 +513,39 @@ yaml_path_filter_event (yaml_path_t *path, yaml_parser_t *parser, yaml_event_t *
 		default:
 			break;
 		}
-		//TODO: DEBUG printf("iv: %d, t: %d, nt: %d, lev: %d\n", current_section->valid, current_section->type, current_section->node_type, current_section->level);
 	}
 
 	switch (event->type) {
 	case YAML_STREAM_START_EVENT:
 	case YAML_STREAM_END_EVENT:
-	case YAML_DOCUMENT_START_EVENT:
-	case YAML_DOCUMENT_END_EVENT:
 	case YAML_NO_EVENT:
+		res = 1;
+		break;
+	case YAML_DOCUMENT_START_EVENT:
+		if (path->start_level == 1)
+			path->current_level++;
+		res = 1;
+		break;
+	case YAML_DOCUMENT_END_EVENT:
+		if (path->start_level == 1)
+			path->current_level--;
 		res = 1;
 		break;
 	case YAML_MAPPING_START_EVENT:
 	case YAML_SEQUENCE_START_EVENT:
-		current_section = yaml_path_section_get_current(path);
-		if (current_section && yaml_path_section_current_is_last(path)) {
-			res = current_section->valid && yaml_path_prev_section_is_valid(path);
+		if (current_section) {
+			if (yaml_path_section_current_is_last(path))
+				res = yaml_path_is_valid(path);
 		} else {
-			if (path->current_level > path->sections_count)
-				if ((!current_section && mode == YAML_PATH_FILTER_RETURN_ALL) || path->current_level == path->sections_count)
-					res = yaml_path_all_sections_are_valid(path);
-		};
+			if (path->current_level > path->start_level) {
+				if (mode == YAML_PATH_FILTER_RETURN_ALL)
+					res = yaml_path_is_valid(path);
+			}
+		}
 		path->current_level++;
 		current_section = yaml_path_section_get_current(path);
 		if (current_section && yaml_path_section_current_is_mandatory_sequence(path)) {
-			res = yaml_path_prev_section_is_valid(path);
+			res = yaml_path_sections_prev_are_valid(path);
 		}
 		if (current_section) {
 			current_section->node_type = event->type == YAML_MAPPING_START_EVENT ? YAML_MAPPING_NODE : YAML_SEQUENCE_NODE;
@@ -535,28 +554,29 @@ yaml_path_filter_event (yaml_path_t *path, yaml_parser_t *parser, yaml_event_t *
 		break;
 	case YAML_MAPPING_END_EVENT:
 	case YAML_SEQUENCE_END_EVENT:
-		if (current_section && yaml_path_section_current_is_mandatory_sequence(path)) {
-			res = yaml_path_prev_section_is_valid(path);
+		if (current_section) {
+			if (yaml_path_section_current_is_mandatory_sequence(path))
+				res = yaml_path_sections_prev_are_valid(path);
 		}
 		path->current_level--;
-		if (path->current_level < path->sections_count && (path->current_level != path->sequence_level || !path->sequence_level))
-			break;
 		current_section = yaml_path_section_get_current(path);
-		if (current_section && yaml_path_section_current_is_last(path)) {
-			res = current_section->valid && yaml_path_prev_section_is_valid(path);
+		if (current_section) {
+			if (yaml_path_section_current_is_last(path))
+				res = yaml_path_is_valid(path);
 		} else {
-			if ((!current_section && mode == YAML_PATH_FILTER_RETURN_ALL) || path->current_level == path->sections_count) {
-				res = yaml_path_all_sections_are_valid(path);
+			if (path->current_level > path->start_level) {
+				if (mode == YAML_PATH_FILTER_RETURN_ALL)
+					res = yaml_path_is_valid(path);
 			}
 		}
 		break;
 	case YAML_ALIAS_EVENT:
 	case YAML_SCALAR_EVENT:
 		if (!current_section) {
-			if (mode == YAML_PATH_FILTER_RETURN_ALL || path->current_level == path->sections_count)
-				res = yaml_path_all_sections_are_valid(path);
+			if ((mode == YAML_PATH_FILTER_RETURN_ALL && path->current_level > path->start_level) || path->current_level == path->start_level)
+				res = yaml_path_is_valid(path);
 		} else {
-			res = current_section->valid && yaml_path_prev_sections_are_valid(path) && yaml_path_section_current_is_last(path);
+			res = yaml_path_is_valid(path) && yaml_path_section_current_is_last(path);
 		}
 		break;
 	default:
