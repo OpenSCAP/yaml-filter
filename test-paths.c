@@ -76,6 +76,10 @@ yp_run (char *path)
 	yaml_path_t *yp = yaml_path_create();
 	yaml_path_parse(yp, path);
 
+	char spath[YAML_STRING_LEN] = {0};
+	yaml_path_snprint(yp, spath, YAML_STRING_LEN);
+	printf("(%s) ", spath);
+
 	yaml_emitter_initialize(&emitter);
 	yaml_parser_initialize(&parser);
 
@@ -85,7 +89,8 @@ yp_run (char *path)
 	yaml_emitter_set_width(&emitter, -1);
 
 	yaml_event_t event;
-	yaml_event_type_t event_type;
+	yaml_event_type_t prev_event_type, event_type;
+
 	do {
 		if (!yaml_parser_parse(&parser, &event)) {
 			switch (parser.error) {
@@ -124,6 +129,12 @@ yp_run (char *path)
 			if (!yaml_path_filter_event(yp, &parser, &event, mode)) {
 				yaml_event_delete(&event);
 			} else {
+				if (prev_event_type == YAML_DOCUMENT_START_EVENT && event_type == YAML_DOCUMENT_END_EVENT) {
+					yaml_event_t null_event= {0};
+					yaml_scalar_event_initialize(&null_event, NULL, (yaml_char_t *)"!!null", (yaml_char_t *)"null", 4, 1, 0, YAML_ANY_SCALAR_STYLE);
+					yaml_emitter_emit(&emitter, &null_event);
+				}
+				prev_event_type = event_type;
 				if (!yaml_emitter_emit(&emitter, &event)) {
 					printf("Error after '%s'\n", yp_event_name(event.type));
 					switch (emitter.error)
@@ -201,8 +212,8 @@ int main (int argc, char *argv[])
 	//       Path                         Expected filtered YAML result
 
 	mode = YAML_PATH_FILTER_RETURN_ALL;
+	yp_test("$.first.Map",               "{1: '1'}");
 	yp_test(".first",                    "{'Map': {1: '1'}, 'Nop': 0, 'Yep': '1', 'Arr': [[11, 12], 2, ['31', '32'], [4, 5, 6, 7, 8, 9], {'k': 'val', 0: 0}]}");
-	yp_test(".first.Map",                "{1: '1'}");
 	yp_test(".first.Nop",                "0");
 	yp_test(".first.Arr",                "[[11, 12], 2, ['31', '32'], [4, 5, 6, 7, 8, 9], {'k': 'val', 0: 0}]");
 	yp_test(".first.Arr[0]",             "[11, 12]");
@@ -217,9 +228,10 @@ int main (int argc, char *argv[])
 	yp_test(".first.Arr[3][1::2]",       "[5, 7, 9]");
 	yp_test(".first.Arr[3][::2]",        "[4, 6, 8]");
 	yp_test(".first.Arr[3][:4:2]",       "[4, 6]");
-	yp_test(".second[0].abc",            "&anc [1, 2]");
+	yp_test(".second[2].abc",            "null");
 	yp_test(".second[0:2].abc",          "[&anc [1, 2], [3, 4]]");
 	yp_test(".second[0].z",              "*anc");
+	yp_test("&anc[0]",                   "1");
 
 	mode = YAML_PATH_FILTER_RETURN_SHALLOW;
 	yp_test(".first",                    "{}");

@@ -12,9 +12,10 @@
 int parse_and_emit (yaml_parser_t *parser, yaml_emitter_t *emitter, yaml_path_t *path, yaml_path_filter_mode_t mode, int use_flow_style)
 {
 	yaml_event_t event;
-	yaml_event_type_t event_type;
+	yaml_event_type_t prev_event_type, event_type;
 
 	do {
+
 		if (!yaml_parser_parse(parser, &event)) {
 			switch (parser->error) {
 			case YAML_MEMORY_ERROR:
@@ -67,6 +68,12 @@ int parse_and_emit (yaml_parser_t *parser, yaml_emitter_t *emitter, yaml_path_t 
 						break;
 					}
 				}
+				if (prev_event_type == YAML_DOCUMENT_START_EVENT && event_type == YAML_DOCUMENT_END_EVENT) {
+					yaml_event_t null_event= {0};
+					yaml_scalar_event_initialize(&null_event, NULL, (yaml_char_t *)"!!null", (yaml_char_t *)"null", 4, 1, 0, YAML_ANY_SCALAR_STYLE);
+					yaml_emitter_emit(emitter, &null_event);
+				}
+				prev_event_type = event_type;
 				if (!yaml_emitter_emit(emitter, &event)) {
 					switch (emitter->error)
 					{
