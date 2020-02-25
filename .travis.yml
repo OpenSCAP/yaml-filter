@@ -1,0 +1,15 @@
+language: c
+dist: bionic
+
+before_script:
+ - mkdir -p build
+ - cd build
+ - sudo apt-get install -y libyaml-0-2
+
+script:
+ - cmake -DENABLE_COVERAGE=yes ..
+ - make && ctest -V
+ - make gcov
+
+after_success:
+ - curl -s https://codecov.io/bash > cov.sh && bash cov.sh -x "$GCOV"
