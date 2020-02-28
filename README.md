@@ -2,4 +2,4 @@
 
 # YAML Path filter
 
-YAML document filtering for libyaml
+Document filtering for libyaml
