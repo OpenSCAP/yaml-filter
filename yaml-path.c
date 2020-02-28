@@ -425,11 +425,11 @@ int
 yaml_path_filter_event (yaml_path_t *path, yaml_parser_t *parser, yaml_event_t *event, yaml_path_filter_mode_t mode)
 {
 	int res = 0;
-	const char *anchor = NULL;
 
 	if (path == NULL || parser == NULL || event == NULL)
 		goto exit;
 
+	const char *anchor = NULL;
 	switch(event->type) {
 	case YAML_MAPPING_START_EVENT:
 		anchor = (const char *)event->data.mapping_start.anchor;
@@ -470,8 +470,7 @@ yaml_path_filter_event (yaml_path_t *path, yaml_parser_t *parser, yaml_event_t *
 	}
 
 	yaml_path_section_t *current_section = yaml_path_section_get_current(path);
-	if (!current_section) {
-	} else {
+	if (current_section) {
 		switch (event->type) {
 		case YAML_DOCUMENT_START_EVENT:
 		case YAML_MAPPING_START_EVENT:
