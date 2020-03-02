@@ -1,15 +1,29 @@
 language: c
-dist: bionic
+
+os:
+  - linux
 
 before_script:
- - mkdir -p build
- - cd build
- - sudo apt-get install -y libyaml-0-2
+  - mkdir -p build
+  - cd build
+  - sudo apt-get install -y libyaml-0-2
 
 script:
- - cmake -DENABLE_COVERAGE=yes ..
- - make && ctest -V
- - make gcov
+  - cmake -DENABLE_COVERAGE=yes ..
+  - build-wrapper-linux-x86-64 --out-dir bw-output make clean all || true # Allowed to fail in builds from forks
+  - make && ctest -V
+  - make gcov
+  - sonar-scanner -Dsonar.cfamily.build-wrapper-output=bw-output || true # Allowed to fail in builds from forks
 
 after_success:
- - curl -s https://codecov.io/bash > cov.sh && bash cov.sh -x "$GCOV"
+  - curl -s https://codecov.io/bash > cov.sh && bash cov.sh -x "$GCOV"
+
+addons:
+  sonarcloud:
+    organization: "openscap"
+    token:
+      secure: "BoPCYdulv5+7sNQtShKE0tYVelHSL3sWNhjz5QFZCDefK7az2+Lze9Zp/sas02gmBLoc0vuuFjFgtKLSPt9mEL4YabwAysCF445jwE+wu8KJf/Bz36tMz1gE9383+Ic9LcR2bdPBY/0gBWZpmKK33mNs+P5xuI23XsK2Whkjev9tg/kjjXAd3Q79WqlDW2SKT5Ugg5SxE6RgFS/pBsxWsqp3Vfx38t3hIhloECf51/aVrBabpYmwYe8l8gq/+A2PO/gpw6SBdCu2Y9x+zlAhWkY7cri7C8LSUSMS0pUM5haij4oO/7UVUbRjWmTDpg3sSLtJka2BIIl32XINMdvBCzbhIpuNCTZlWz3KCyBWRvV8r95n+p2IahbV7ZU/Jc8QvBNC0IsjCjHORtuJzXOa3BCZ2PXggboX1uaHkLe+xECC/3gjLDXAcUvM6QJN2Ytbnzfd2jTlhCt1a3ttCPUvSqN9CIJWIKnbpHPWwAk7YuMH7GXbCle9mInDvPOe16KTQ39RMsWRE1HgyTHErfT5pyaCwv2lq4oThuCrUyAGmMYgC6OZalW9DciQwp/kzKECnrwfjCCy8uJu/BlXWGMeJWjRaLFpOpZLIPaVVvKlODb8zZUZeVV1sqyyQ6+I4Opfmi0ikVW4eOqyXRy1G1O9OxXeHC2SHFuK4E5cks05EA4="
+
+cache:
+  directories:
+    - '$HOME/.sonar/cache'
