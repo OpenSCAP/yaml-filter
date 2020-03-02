@@ -13,7 +13,7 @@ script:
   - build-wrapper-linux-x86-64 --out-dir bw-output make clean all || true # Allowed to fail in builds from forks
   - make && ctest -V
   - make gcov
-  - sonar-scanner -Dsonar.cfamily.build-wrapper-output=bw-output || true # Allowed to fail in builds from forks
+  - sonar-scanner -Dproject.settings=../sonar-project.properties || true # Allowed to fail in builds from forks
 
 after_success:
   - curl -s https://codecov.io/bash > cov.sh && bash cov.sh -x "$GCOV"
