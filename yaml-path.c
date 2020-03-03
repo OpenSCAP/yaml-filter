@@ -24,7 +24,7 @@ typedef enum yaml_path_section_type {
 
 typedef struct yaml_path_section {
 	yaml_path_section_type_t type;
-	int level;
+	size_t level;
 	union {
 		const char *key;
 		const char *anchor;
@@ -248,7 +248,7 @@ _parse (yaml_path_t *path, char *s_path) {
 			if (path->sections_count == 0) {
 				spe = sp + 1;
 				if (*sp == '$' && (*spe == '.' || *spe == '[' || *spe == '\0')) {
-					yaml_path_section_t *sec = yaml_path_section_create(path, YAML_PATH_SECTION_ROOT);
+					yaml_path_section_create(path, YAML_PATH_SECTION_ROOT);
 				} else if (*sp == '&') {
 					// Anchor
 					sp++;

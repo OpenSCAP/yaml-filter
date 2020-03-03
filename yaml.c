@@ -8,7 +8,8 @@
 #define INDENT "  "
 #define STRVAL(x) ((x) ? (char*)(x) : "")
 
-void indent(int level)
+static void
+indent(int level)
 {
 	int i;
 	for (i = 0; i < level; i++) {
@@ -16,7 +17,8 @@ void indent(int level)
 	}
 }
 
-void print_event(yaml_event_t *event)
+static void
+print_event(yaml_event_t *event)
 {
 	static int level = 0;
 	
@@ -79,7 +81,8 @@ void print_event(yaml_event_t *event)
 	}
 }
 
-int yaml_parser_parse_and_filter (yaml_parser_t *parser, yaml_event_t *event, yaml_path_t *path)
+static int
+yaml_parser_parse_and_filter (yaml_parser_t *parser, yaml_event_t *event, yaml_path_t *path)
 {
 	int valid_event = 0;
 	int res;

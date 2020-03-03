@@ -66,7 +66,7 @@ static int
 test_result = 0;
 
 
-int
+static int
 yp_run (char *path)
 {
 	yaml_parser_t parser;
@@ -89,7 +89,7 @@ yp_run (char *path)
 	yaml_emitter_set_width(&emitter, -1);
 
 	yaml_event_t event;
-	yaml_event_type_t prev_event_type, event_type;
+	yaml_event_type_t event_type, prev_event_type = YAML_NO_EVENT;
 
 	do {
 		if (!yaml_parser_parse(&parser, &event)) {
@@ -171,7 +171,7 @@ error:
 #define ASCII_ERR "\033[0;33m"
 #define ASCII_RST "\033[0;0m"
 
-void
+static void
 yp_test (char *path, char *yaml_exp)
 {
 	printf("%s ", path);

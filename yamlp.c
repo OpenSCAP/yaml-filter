@@ -9,10 +9,11 @@
 #include "yaml-path.h"
 
 
-int parse_and_emit (yaml_parser_t *parser, yaml_emitter_t *emitter, yaml_path_t *path, yaml_path_filter_mode_t mode, int use_flow_style)
+static int
+parse_and_emit (yaml_parser_t *parser, yaml_emitter_t *emitter, yaml_path_t *path, yaml_path_filter_mode_t mode, int use_flow_style)
 {
 	yaml_event_t event;
-	yaml_event_type_t prev_event_type, event_type;
+	yaml_event_type_t event_type, prev_event_type = YAML_NO_EVENT;
 
 	do {
 
@@ -100,7 +101,8 @@ int parse_and_emit (yaml_parser_t *parser, yaml_emitter_t *emitter, yaml_path_t 
 }
 
 
-void help (void)
+static void
+help (void)
 {
 	printf("yamlp - filtering utility for YAML documents\n");
 	printf("\n");

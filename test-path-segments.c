@@ -17,7 +17,7 @@ yp_s[PATH_STRING_LEN] = {0};
 #define ASCII_ERR "\033[0;33m"
 #define ASCII_RST "\033[0;0m"
 
-void
+static void
 yp_test (char *p, int expected_failure)
 {
 	yaml_path_t *yp = yaml_path_create();
