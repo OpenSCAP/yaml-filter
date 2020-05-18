@@ -41,7 +41,7 @@ typedef struct yaml_path_section {
 
 typedef TAILQ_HEAD(path_section_list, yaml_path_section) path_section_list_t;
 
-typedef struct yaml_path {
+struct yaml_path {
 	path_section_list_t sections_list;
 	size_t sections_count;
 	size_t sequence_level;
@@ -50,7 +50,7 @@ typedef struct yaml_path {
 	size_t start_level;
 
 	yaml_path_error_t error;
-} yaml_path_t;
+};
 
 
 static void
@@ -260,8 +260,8 @@ _parse (yaml_path_t *path, char *s_path) {
 					// Key
 					while (*spe != '.' && *spe != '[' && *spe != '\0')
 						spe++;
-					yaml_path_section_t *sec = yaml_path_section_create(path, YAML_PATH_SECTION_ROOT);
-					sec = yaml_path_section_create(path, YAML_PATH_SECTION_KEY);
+					yaml_path_section_create(path, YAML_PATH_SECTION_ROOT);
+					yaml_path_section_t *sec = yaml_path_section_create(path, YAML_PATH_SECTION_KEY);
 					sec->data.key = strndup(sp, spe-sp);
 				}
 				sp = spe-1;
