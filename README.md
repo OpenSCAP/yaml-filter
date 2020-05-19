@@ -3,3 +3,5 @@
 # YAML Path filter
 
 Document filtering for libyaml
+
+https://github.com/OpenSCAP/yaml-filter/wiki/YAML-Path-Definition
