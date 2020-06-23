@@ -79,9 +79,9 @@ yp_run (char *path)
 	yaml_path_t *yp = yaml_path_create();
 	yaml_path_parse(yp, path);
 
-	char spath[YAML_STRING_LEN] = {0};
-	yaml_path_snprint(yp, spath, YAML_STRING_LEN);
-	printf("(%s) ", spath);
+	//char spath[YAML_STRING_LEN] = {0};
+	//yaml_path_snprint(yp, spath, YAML_STRING_LEN);
+	//printf("(%s) ", spath);
 
 	yaml_emitter_initialize(&emitter);
 	yaml_parser_initialize(&parser);
@@ -93,6 +93,7 @@ yp_run (char *path)
 
 	yaml_event_t event;
 	yaml_event_type_t event_type, prev_event_type = YAML_NO_EVENT;
+	int result, prev_result = 0;
 
 	do {
 		if (!yaml_parser_parse(&parser, &event)) {
@@ -129,30 +130,34 @@ yp_run (char *path)
 			goto error;
 		} else {
 			event_type = event.type;
-			if (!yaml_path_filter_event(yp, &parser, &event, mode)) {
+			result = yaml_path_filter_event(yp, &parser, &event, mode);
+			if (!result) {
 				yaml_event_delete(&event);
 			} else {
-				if (prev_event_type == YAML_DOCUMENT_START_EVENT && event_type == YAML_DOCUMENT_END_EVENT) {
+				if ((prev_event_type == YAML_DOCUMENT_START_EVENT && event_type == YAML_DOCUMENT_END_EVENT)
+					|| (prev_result == 2 && (event_type == YAML_MAPPING_END_EVENT || event_type == YAML_SEQUENCE_END_EVENT || result == 2))) {
 					yaml_event_t null_event= {0};
 					yaml_scalar_event_initialize(&null_event, NULL, (yaml_char_t *)"!!null", (yaml_char_t *)"null", 4, 1, 0, YAML_ANY_SCALAR_STYLE);
 					yaml_emitter_emit(&emitter, &null_event);
 				}
+				prev_result = result;
 				prev_event_type = event_type;
 				if (!yaml_emitter_emit(&emitter, &event)) {
-					printf("Error after '%s'\n", yp_event_name(event.type));
+					yaml_emitter_flush(&emitter);
+					printf("%s --> Error after '%s': ", yaml_out, yp_event_name(event.type));
 					switch (emitter.error)
 					{
 					case YAML_MEMORY_ERROR:
-						printf("Memory error: Not enough memory for emitting\n");
+						printf("Memory error (Not enough memory for emitting)");
 						break;
 					case YAML_WRITER_ERROR:
-						printf("Writer error: %s\n", emitter.problem);
+						printf("Writer error (%s)", emitter.problem);
 						break;
 					case YAML_EMITTER_ERROR:
-						printf("Emitter error: %s\n", emitter.problem);
+						printf("Emitter error (%s)", emitter.problem);
 						break;
 					default:
-						printf("Internal error\n");
+						printf("Internal error");
 						break;
 					}
 					res = 2;
@@ -177,14 +182,16 @@ error:
 static void
 yp_test (char *path, char *yaml_exp)
 {
-	printf("%s ", path);
+	printf("%s "ASCII_ERR, path);
 	if (!yp_run(path)) {
 		rstrip(yaml_out);
 		if (!strcmp(yaml_exp, yaml_out)) {
-			printf("(%s): OK\n", yaml_exp);
+			printf(ASCII_RST"(%s): OK\n", yaml_exp);
 			return;
 		}
-		printf(ASCII_ERR"(%s != %s)"ASCII_RST": FAILED\n", yaml_exp, yaml_out);
+		printf("(%s != %s)"ASCII_RST": FAILED\n", yaml_exp, yaml_out);
+	} else {
+		printf(ASCII_RST": ERROR\n");
 	}
 	test_result++;
 }
@@ -207,12 +214,17 @@ int main (int argc, char *argv[])
 				"]"
 			"},"
 			"second: ["
-				"{'abc': &anc [1, 2], 'abcdef': 2, 'z': *anc},"
-				"{'abc': [3, 4], 'abcdef': 4, 'z': 'zzz'}"
+				"{'abc': &anc [1, 2], 'def': [11, 22], 'abcdef': 2, 'z': *anc, 'q': 'Q'},"
+				"{'abc': [3, 4], 'def': {'z': '!'}, 'abcdef': 4, 'z': 'zzz'}"
 			"]"
 		"}";
 
 	//       Path                         Expected filtered YAML result
+
+	mode = YAML_PATH_FILTER_RETURN_SHALLOW;
+	yp_test(".first",                    "{}");
+	yp_test(".first.Nop",                "0");
+	yp_test(".first.Map",                "{}");
 
 	mode = YAML_PATH_FILTER_RETURN_ALL;
 	yp_test("$.first.Map",               "{1: '1'}");
@@ -224,6 +236,7 @@ int main (int argc, char *argv[])
 	yp_test(".first.Arr[2][0]",          "'31'");
 	yp_test(".first.Arr[:2][0]",         "[11]");
 	yp_test(".first.Arr[3][:]",          "[4, 5, 6, 7, 8, 9]");
+	yp_test(".first.Arr[:][:]",          "[11, 12, '31', '32', 4, 5, 6, 7, 8, 9]");
 	yp_test(".first.Arr[4].k",           "'val'");
 	yp_test(".first.Arr[:][0]",          "[11, '31', 4]");
 	yp_test(".first.Arr[:].k",           "['val']");
@@ -234,12 +247,14 @@ int main (int argc, char *argv[])
 	yp_test(".second[2].abc",            "null");
 	yp_test(".second[0:2].abc",          "[&anc [1, 2], [3, 4]]");
 	yp_test(".second[0].z",              "*anc");
+	yp_test("&anc",                      "&anc [1, 2]");
 	yp_test("&anc[0]",                   "1");
-
-	mode = YAML_PATH_FILTER_RETURN_SHALLOW;
-	yp_test(".first",                    "{}");
-	yp_test(".first.Nop",                "0");
-	yp_test(".first.Map",                "{}");
+	yp_test(".first['Nop','Yep']",       "{'Nop': 0, 'Yep': '1'}");
+	yp_test(".second[0]['abc','def'][0]","{'abc': 1, 'def': 11}");
+	yp_test(".second[:]['abc','def'][0]","[{'abc': 1, 'def': 11}, {'abc': 3, 'def': null}]");
+	yp_test(".second[:]['abc','def'].z", "[{'abc': null, 'def': null}, {'abc': null, 'def': '!'}]");
+	yp_test(".second[:]['abc','q']",     "[{'abc': &anc [1, 2], 'q': 'Q'}, {'abc': [3, 4]}]");
+	yp_test(".second[:]['abc','def'][:]","[{'abc': &anc [1, 2], 'def': [11, 22]}, {'abc': [3, 4], 'def': null}]");
 
 	return test_result;
 }

@@ -38,7 +38,7 @@ yp_test (char *p, int expected_failure)
 			printf(ASCII_ERR);
 			test_result++;
 		}
-		printf(" -X %s (at pos: %zu): %s\n", ype->message, ype->pos, !expected_failure ? ASCII_RST"FAILED" : "OK");
+		printf(" -- %s (at pos: %zu): %s\n", ype->message, ype->pos, !expected_failure ? ASCII_RST"FAILED" : "OK");
 	}
 	yaml_path_destroy(yp);
 }
@@ -78,6 +78,13 @@ int main (int argc, char *argv[])
 	yp_test_good("el['key']");
 	yp_test_good("el['key'].other[0]['key']");
 
+	yp_test_good("el['first','other']");
+
+	yp_test_invalid("$$");
+	yp_test_invalid("$&");
+
+	yp_test_invalid("&");
+
 	yp_test_invalid("$.");
 	yp_test_invalid("");
 	yp_test_invalid(".");
@@ -99,6 +106,11 @@ int main (int argc, char *argv[])
 	yp_test_invalid("el['key].wrong");
 	yp_test_invalid("el['key.wrong");
 	yp_test_invalid("el['key'");
+
+	yp_test_invalid("el['key';'wrong']");
+	yp_test_invalid("el['key',]");
+	yp_test_invalid("el['key',invalid]");
+	yp_test_invalid("el['key','valid']['not','allowed']");
 
 	return test_result;
 }

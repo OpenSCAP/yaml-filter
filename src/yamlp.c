@@ -14,6 +14,7 @@ parse_and_emit (yaml_parser_t *parser, yaml_emitter_t *emitter, yaml_path_t *pat
 {
 	yaml_event_t event;
 	yaml_event_type_t event_type, prev_event_type = YAML_NO_EVENT;
+	yaml_event_type_t result, prev_result = 0;
 
 	do {
 
@@ -54,7 +55,8 @@ parse_and_emit (yaml_parser_t *parser, yaml_emitter_t *emitter, yaml_path_t *pat
 			return 1;
 		} else {
 			event_type = event.type;
-			if (!yaml_path_filter_event(path, parser, &event, mode)) {
+			result = yaml_path_filter_event(path, parser, &event, mode);
+			if (!result) {
 				yaml_event_delete(&event);
 			} else {
 				if (use_flow_style) {
@@ -69,11 +71,13 @@ parse_and_emit (yaml_parser_t *parser, yaml_emitter_t *emitter, yaml_path_t *pat
 						break;
 					}
 				}
-				if (prev_event_type == YAML_DOCUMENT_START_EVENT && event_type == YAML_DOCUMENT_END_EVENT) {
+				if ((prev_event_type == YAML_DOCUMENT_START_EVENT && event_type == YAML_DOCUMENT_END_EVENT)
+					|| (prev_result == 2 && (event_type == YAML_MAPPING_END_EVENT || event_type == YAML_SEQUENCE_END_EVENT || result == 2))) {
 					yaml_event_t null_event= {0};
 					yaml_scalar_event_initialize(&null_event, NULL, (yaml_char_t *)"!!null", (yaml_char_t *)"null", 4, 1, 0, YAML_ANY_SCALAR_STYLE);
 					yaml_emitter_emit(emitter, &null_event);
 				}
+				prev_result = result;
 				prev_event_type = event_type;
 				if (!yaml_emitter_emit(emitter, &event)) {
 					switch (emitter->error)
@@ -188,7 +192,8 @@ int main(int argc, char *argv[])
 
 	yaml_path_t *path = yaml_path_create();
 	if (yaml_path_parse(path, path_string)) {
-		fprintf(stderr, "Invalid path '%s' (%s)\n", path_string, yaml_path_error_get(path)->message);
+		fprintf(stderr, "Invalid path: '%s'\n", path_string);
+		fprintf(stderr, "               %*s^ %s [at position %zu]\n", (int)yaml_path_error_get(path)->pos, " ", yaml_path_error_get(path)->message, yaml_path_error_get(path)->pos);
 		return 3;
 	};
 
@@ -210,7 +215,8 @@ int main(int argc, char *argv[])
 	yaml_emitter_delete(&emitter);
 
 	yaml_path_destroy(path);
-	fclose(file);
+	if (file != NULL)
+		fclose(file);
 
 	return 0;
 }
