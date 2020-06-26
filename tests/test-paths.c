@@ -93,7 +93,7 @@ yp_run (char *path)
 
 	yaml_event_t event;
 	yaml_event_type_t event_type, prev_event_type = YAML_NO_EVENT;
-	int result, prev_result = 0;
+	yaml_path_filter_result_t result, prev_result = 0;
 
 	do {
 		if (!yaml_parser_parse(&parser, &event)) {
@@ -131,11 +131,12 @@ yp_run (char *path)
 		} else {
 			event_type = event.type;
 			result = yaml_path_filter_event(yp, &parser, &event, mode);
-			if (!result) {
+			if (result == YAML_PATH_FILTER_RESULT_OUT) {
 				yaml_event_delete(&event);
 			} else {
 				if ((prev_event_type == YAML_DOCUMENT_START_EVENT && event_type == YAML_DOCUMENT_END_EVENT)
-					|| (prev_result == 2 && (event_type == YAML_MAPPING_END_EVENT || event_type == YAML_SEQUENCE_END_EVENT || result == 2))) {
+					|| (prev_result == YAML_PATH_FILTER_RESULT_IN_DANGLING
+						&& (event_type == YAML_MAPPING_END_EVENT || event_type == YAML_SEQUENCE_END_EVENT || result == YAML_PATH_FILTER_RESULT_IN_DANGLING))) {
 					yaml_event_t null_event= {0};
 					yaml_scalar_event_initialize(&null_event, NULL, (yaml_char_t *)"!!null", (yaml_char_t *)"null", 4, 1, 0, YAML_ANY_SCALAR_STYLE);
 					yaml_emitter_emit(&emitter, &null_event);
@@ -255,6 +256,7 @@ int main (int argc, char *argv[])
 	yp_test(".second[:]['abc','def'].z", "[{'abc': null, 'def': null}, {'abc': null, 'def': '!'}]");
 	yp_test(".second[:]['abc','q']",     "[{'abc': &anc [1, 2], 'q': 'Q'}, {'abc': [3, 4]}]");
 	yp_test(".second[:]['abc','def'][:]","[{'abc': &anc [1, 2], 'def': [11, 22]}, {'abc': [3, 4], 'def': null}]");
+	yp_test(".second[0]['abc','def']",   "{'abc': &anc [1, 2], 'def': [11, 22]}");
 
 	return test_result;
 }

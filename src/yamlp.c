@@ -14,7 +14,7 @@ parse_and_emit (yaml_parser_t *parser, yaml_emitter_t *emitter, yaml_path_t *pat
 {
 	yaml_event_t event;
 	yaml_event_type_t event_type, prev_event_type = YAML_NO_EVENT;
-	yaml_event_type_t result, prev_result = 0;
+	yaml_path_filter_result_t result, prev_result = YAML_PATH_FILTER_RESULT_OUT;
 
 	do {
 
@@ -56,7 +56,7 @@ parse_and_emit (yaml_parser_t *parser, yaml_emitter_t *emitter, yaml_path_t *pat
 		} else {
 			event_type = event.type;
 			result = yaml_path_filter_event(path, parser, &event, mode);
-			if (!result) {
+			if (result == YAML_PATH_FILTER_RESULT_OUT) {
 				yaml_event_delete(&event);
 			} else {
 				if (use_flow_style) {
@@ -72,7 +72,10 @@ parse_and_emit (yaml_parser_t *parser, yaml_emitter_t *emitter, yaml_path_t *pat
 					}
 				}
 				if ((prev_event_type == YAML_DOCUMENT_START_EVENT && event_type == YAML_DOCUMENT_END_EVENT)
-					|| (prev_result == 2 && (event_type == YAML_MAPPING_END_EVENT || event_type == YAML_SEQUENCE_END_EVENT || result == 2))) {
+					|| (prev_result == YAML_PATH_FILTER_RESULT_IN_DANGLING
+						&& (event_type == YAML_MAPPING_END_EVENT
+							|| event_type == YAML_SEQUENCE_END_EVENT
+							|| result == YAML_PATH_FILTER_RESULT_IN_DANGLING))) {
 					yaml_event_t null_event= {0};
 					yaml_scalar_event_initialize(&null_event, NULL, (yaml_char_t *)"!!null", (yaml_char_t *)"null", 4, 1, 0, YAML_ANY_SCALAR_STYLE);
 					yaml_emitter_emit(emitter, &null_event);

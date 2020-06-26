@@ -24,6 +24,12 @@ typedef enum yaml_path_filter_mode {
 	YAML_PATH_FILTER_RETURN_SHALLOW,
 } yaml_path_filter_mode_t;
 
+typedef enum yaml_path_filter_result {
+	YAML_PATH_FILTER_RESULT_OUT,
+	YAML_PATH_FILTER_RESULT_IN,
+	YAML_PATH_FILTER_RESULT_IN_DANGLING,
+} yaml_path_filter_result_t;
+
 
 yaml_path_t*
 yaml_path_create (void);
@@ -37,7 +43,7 @@ yaml_path_destroy (yaml_path_t *path);
 const yaml_path_error_t*
 yaml_path_error_get (yaml_path_t *path);
 
-int
+yaml_path_filter_result_t
 yaml_path_filter_event (yaml_path_t *path, yaml_parser_t *parser, yaml_event_t *event, yaml_path_filter_mode_t mode);
 
 size_t

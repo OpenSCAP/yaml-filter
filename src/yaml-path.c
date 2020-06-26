@@ -560,13 +560,13 @@ yaml_path_snprint (yaml_path_t *path, char *s, size_t max_len)
 	return len;
 }
 
-int
+yaml_path_filter_result_t
 yaml_path_filter_event (yaml_path_t *path, yaml_parser_t *parser, yaml_event_t *event, yaml_path_filter_mode_t mode)
 {
 	if (path == NULL || parser == NULL || event == NULL)
-		return 0;
+		return YAML_PATH_FILTER_RESULT_OUT;
 
-	int res = 0;
+	int res = YAML_PATH_FILTER_RESULT_OUT;
 
 	const char *anchor = NULL;
 	switch(event->type) {
@@ -665,27 +665,29 @@ yaml_path_filter_event (yaml_path_t *path, yaml_parser_t *parser, yaml_event_t *
 	case YAML_STREAM_START_EVENT:
 	case YAML_STREAM_END_EVENT:
 	case YAML_NO_EVENT:
-		res = 1;
+		res = YAML_PATH_FILTER_RESULT_IN;
 		break;
 	case YAML_DOCUMENT_START_EVENT:
 		if (path->start_level == 1)
 			path->current_level++;
-		res = 1;
+		res = YAML_PATH_FILTER_RESULT_IN;
 		break;
 	case YAML_DOCUMENT_END_EVENT:
 		if (path->start_level == 1)
 			path->current_level--;
-		res = 1;
+		res = YAML_PATH_FILTER_RESULT_IN;
 		break;
 	case YAML_MAPPING_START_EVENT:
 	case YAML_SEQUENCE_START_EVENT:
 		if (current_section) {
 			if (yaml_path_section_current_is_last(path))
-				res = yaml_path_is_valid(path);
+				if (yaml_path_is_valid(path))
+					res = YAML_PATH_FILTER_RESULT_IN;
 		} else {
 			if (path->current_level > path->start_level) {
 				if (mode == YAML_PATH_FILTER_RETURN_ALL)
-					res = yaml_path_is_valid(path);
+					if (yaml_path_is_valid(path))
+						res = YAML_PATH_FILTER_RESULT_IN;
 			}
 		}
 		path->current_level++;
@@ -695,23 +697,27 @@ yaml_path_filter_event (yaml_path_t *path, yaml_parser_t *parser, yaml_event_t *
 			current_section->counter = 0;
 		}
 		if (current_section) {
-			res = yaml_path_section_current_is_mandatory_container(path);
+			if (yaml_path_section_current_is_mandatory_container(path))
+				res = YAML_PATH_FILTER_RESULT_IN;
 		}
 		break;
 	case YAML_MAPPING_END_EVENT:
 	case YAML_SEQUENCE_END_EVENT:
 		if (current_section) {
-			res = yaml_path_section_current_is_mandatory_container(path);
+			if (yaml_path_section_current_is_mandatory_container(path))
+				res = YAML_PATH_FILTER_RESULT_IN;
+
 		}
 		path->current_level--;
 		current_section = yaml_path_section_get_current(path);
 		if (current_section) {
 			if (yaml_path_section_current_is_last(path))
-				res = yaml_path_is_valid(path);
+				if (yaml_path_is_valid(path))
+					res = YAML_PATH_FILTER_RESULT_IN;
 		} else {
 			if (path->current_level > path->start_level) {
-				if (mode == YAML_PATH_FILTER_RETURN_ALL)
-					res = yaml_path_is_valid(path);
+				if (mode == YAML_PATH_FILTER_RETURN_ALL && yaml_path_is_valid(path))
+					res = YAML_PATH_FILTER_RESULT_IN;
 			}
 		}
 		break;
@@ -719,14 +725,15 @@ yaml_path_filter_event (yaml_path_t *path, yaml_parser_t *parser, yaml_event_t *
 	case YAML_SCALAR_EVENT:
 		if (!current_section) {
 			if ((mode == YAML_PATH_FILTER_RETURN_ALL && path->current_level > path->start_level) || path->current_level == path->start_level)
-				res = yaml_path_is_valid(path);
+				if (yaml_path_is_valid(path))
+					res = YAML_PATH_FILTER_RESULT_IN;
 		} else {
 			res = (yaml_path_section_current_is_last(path) && yaml_path_is_valid(path));
 			if (current_section->valid
 				&& current_section->node_type == YAML_MAPPING_NODE 
 				&& yaml_path_section_current_is_mandatory_container(path)
 				&& current_section->counter % 2) {
-					res = 2;
+					res = YAML_PATH_FILTER_RESULT_IN_DANGLING;
 				}
 		}
 		break;
