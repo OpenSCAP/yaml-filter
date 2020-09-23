@@ -72,10 +72,10 @@ parse_and_emit (yaml_parser_t *parser, yaml_emitter_t *emitter, yaml_path_t *pat
 					}
 				}
 				if ((prev_event_type == YAML_DOCUMENT_START_EVENT && event_type == YAML_DOCUMENT_END_EVENT)
-					|| (prev_result == YAML_PATH_FILTER_RESULT_IN_DANGLING
+					|| (prev_result == YAML_PATH_FILTER_RESULT_IN_DANGLING_KEY
 						&& (event_type == YAML_MAPPING_END_EVENT
 							|| event_type == YAML_SEQUENCE_END_EVENT
-							|| result == YAML_PATH_FILTER_RESULT_IN_DANGLING))) {
+							|| result == YAML_PATH_FILTER_RESULT_IN_DANGLING_KEY))) {
 					yaml_event_t null_event= {0};
 					yaml_scalar_event_initialize(&null_event, NULL, (yaml_char_t *)"!!null", (yaml_char_t *)"null", 4, 1, 0, YAML_ANY_SCALAR_STYLE);
 					yaml_emitter_emit(emitter, &null_event);

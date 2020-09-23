@@ -728,12 +728,13 @@ yaml_path_filter_event (yaml_path_t *path, yaml_parser_t *parser, yaml_event_t *
 				if (yaml_path_is_valid(path))
 					res = YAML_PATH_FILTER_RESULT_IN;
 		} else {
-			res = (yaml_path_section_current_is_last(path) && yaml_path_is_valid(path));
+			if (yaml_path_section_current_is_last(path) && yaml_path_is_valid(path))
+				res = YAML_PATH_FILTER_RESULT_IN;
 			if (current_section->valid
-				&& current_section->node_type == YAML_MAPPING_NODE 
-				&& yaml_path_section_current_is_mandatory_container(path)
+				&& current_section->node_type == YAML_MAPPING_NODE
 				&& current_section->counter % 2) {
-					res = YAML_PATH_FILTER_RESULT_IN_DANGLING;
+					if (yaml_path_section_current_is_mandatory_container(path))
+						res = YAML_PATH_FILTER_RESULT_IN_DANGLING_KEY;
 				}
 		}
 		break;

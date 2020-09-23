@@ -9,7 +9,7 @@ typedef struct yaml_path yaml_path_t;
 typedef enum yaml_path_error_type {
 	YAML_PATH_ERROR_NONE,
 	YAML_PATH_ERROR_PARSE,
-    YAML_PATH_ERROR_SECTION,
+	YAML_PATH_ERROR_SECTION,
 } yaml_path_error_type_t;
 
 typedef struct yaml_path_error {
@@ -27,7 +27,7 @@ typedef enum yaml_path_filter_mode {
 typedef enum yaml_path_filter_result {
 	YAML_PATH_FILTER_RESULT_OUT,
 	YAML_PATH_FILTER_RESULT_IN,
-	YAML_PATH_FILTER_RESULT_IN_DANGLING,
+	YAML_PATH_FILTER_RESULT_IN_DANGLING_KEY,
 } yaml_path_filter_result_t;
 
 
