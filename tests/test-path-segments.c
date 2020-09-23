@@ -111,6 +111,7 @@ int main (int argc, char *argv[])
 	yp_test_invalid("el['key',]");
 	yp_test_invalid("el['key',invalid]");
 	yp_test_invalid("el['key','valid']['not','allowed']");
+	yp_test_invalid("el['first',]");
 
 	return test_result;
 }

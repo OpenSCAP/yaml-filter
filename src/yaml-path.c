@@ -75,16 +75,16 @@ yaml_path_selection_snprint (path_key_list_t *selection, char *s, size_t max_len
 	return len;
 }
 
-static bool
-yaml_path_selection_key_is_present (path_key_list_t *selection, const char *key)
+static const char*
+yaml_path_selection_key_get (path_key_list_t *selection, const char *key)
 {
 	assert(selection != NULL);
 	yaml_path_key_t *el;
 	TAILQ_FOREACH(el, selection, entries) {
 		if (!strcmp(el->key, key))
-			return true;
+			return el->key;
 	}
-	return false;
+	return NULL;
 }
 
 static void
@@ -376,7 +376,7 @@ _parse (yaml_path_t *path, char *s_path) {
 		default:
 			if (path->sections_count == 0) {
 				spe = sp + 1;
-				// Special beginning of the path (implicit key)
+				// Special start of the path (implicit key)
 				while (*spe != '.' && *spe != '[' && *spe != '\0')
 					spe++;
 				yaml_path_section_create(path, YAML_PATH_SECTION_ROOT);
@@ -634,7 +634,8 @@ yaml_path_filter_event (yaml_path_t *path, yaml_parser_t *parser, yaml_event_t *
 						current_section->valid = current_section->next_valid;
 						current_section->next_valid = false;
 					} else {
-						current_section->next_valid = yaml_path_selection_key_is_present(&current_section->data.selection, (const char *)event->data.scalar.value);
+						const char *key = yaml_path_selection_key_get(&current_section->data.selection, (const char *)event->data.scalar.value);
+						current_section->next_valid = (key != NULL);
 						current_section->valid = current_section->next_valid;
 					}
 				} else {
