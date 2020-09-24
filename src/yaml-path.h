@@ -8,6 +8,7 @@ typedef struct yaml_path yaml_path_t;
 
 typedef enum yaml_path_error_type {
 	YAML_PATH_ERROR_NONE,
+	YAML_PATH_ERROR_NOMEM,
 	YAML_PATH_ERROR_PARSE,
 	YAML_PATH_ERROR_SECTION,
 } yaml_path_error_type_t;

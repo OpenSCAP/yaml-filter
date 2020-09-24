@@ -96,17 +96,21 @@ yaml_path_selection_key_get (path_key_list_t *selection, const char *key)
 	return NULL;
 }
 
-static void
+static size_t
 yaml_path_selection_keys_add (path_key_list_t *selection, yaml_path_selection_key_raw_t *raw_keys, size_t count)
 {
 	assert(selection != NULL);
 	assert(raw_keys != NULL);
 	for (size_t i = 0; i < count; i++) {
 		yaml_path_key_t *el = malloc(sizeof(*el));
-		assert(el != NULL);
-		el->key = strndup(raw_keys[i].start, raw_keys[i].len);
+		if (el == NULL)
+			return i;
 		TAILQ_INSERT_TAIL(selection, el, entries);
+		el->key = strndup(raw_keys[i].start, raw_keys[i].len);
+		if (el->key == NULL)
+			return i;
 	}
+	return count;
 }
 
 static void
@@ -152,15 +156,16 @@ static yaml_path_section_t*
 yaml_path_section_create (yaml_path_t *path, yaml_path_section_type_t section_type)
 {
 	yaml_path_section_t *el = malloc(sizeof(*el));
-	assert(el != NULL);
-	memset(el, 0, sizeof(*el));
-	path->sections_count++;
-	el->level = path->sections_count;
-	el->type = section_type;
-	el->node_type = YAML_NO_NODE;
-	TAILQ_INSERT_TAIL(&path->sections_list, el, entries);
-	if (el->type == YAML_PATH_SECTION_SELECTION) {
-		TAILQ_INIT(&el->data.selection);
+	if (el != NULL) {
+		memset(el, 0, sizeof(*el));
+		path->sections_count++;
+		el->level = path->sections_count;
+		el->type = section_type;
+		el->node_type = YAML_NO_NODE;
+		TAILQ_INSERT_TAIL(&path->sections_list, el, entries);
+		if (el->type == YAML_PATH_SECTION_SELECTION) {
+			TAILQ_INIT(&el->data.selection);
+		}
 	}
 	return el;
 }
@@ -233,6 +238,12 @@ yaml_path_error_clear (yaml_path_t *path)
 	yaml_path_error_set(path, YAML_PATH_ERROR_NONE, NULL, 0);
 }
 
+#define return_with_error(error_type, error_text, error_pos)          \
+do {                                                \
+	yaml_path_error_set(path, error_type, (error_text), (error_pos)); \
+	goto error;                                     \
+} while (0)
+
 static void
 yaml_path_parse_impl (yaml_path_t *path, char *s_path) {
 	char *sp = s_path;
@@ -250,19 +261,21 @@ yaml_path_parse_impl (yaml_path_t *path, char *s_path) {
 		case '.':
 		case '[':
 			if (path->sections_count == 0) {
-				yaml_path_section_create(path, YAML_PATH_SECTION_ROOT);
+				yaml_path_section_t *sec = yaml_path_section_create(path, YAML_PATH_SECTION_ROOT);
+				if (sec == NULL)
+					return_with_error(YAML_PATH_ERROR_NOMEM, "Unable to allocate memory for the section", sp - s_path);
 			}
 			if (*sp == '.') {
 				// Key
 				spe = sp + 1;
 				while (*spe != '.' && *spe != '[' && *spe != '\0')
 					spe++;
-				if (spe == sp+1) {
-					yaml_path_error_set(path, YAML_PATH_ERROR_PARSE, "Segment key is missing", sp - s_path);
-					goto error;
-				}
+				if (spe == sp+1)
+					return_with_error(YAML_PATH_ERROR_PARSE, "Segment key is missing", sp - s_path);
 				yaml_path_section_t *sec = yaml_path_section_create(path, YAML_PATH_SECTION_KEY);
 				sec->data.key = strndup(sp + 1, spe-sp - 1);
+				if (sec->data.key == NULL)
+					return_with_error(YAML_PATH_ERROR_NOMEM, "Unable to allocate memory for the key", sp - s_path);
 				sp = spe - 1;
 			} else if (*sp == '[') {
 				spe = sp + 1;
@@ -276,49 +289,45 @@ yaml_path_parse_impl (yaml_path_t *path, char *s_path) {
 						spe++;
 						while (*spe != quote && *spe != '\0')
 							spe++;
-						if (*spe == '\0') {
-							yaml_path_error_set(path, YAML_PATH_ERROR_PARSE, "Segment key is invalid (unexpected end of string, missing closing quotation mark)", sp - s_path);
-							goto error;
-						}
-						if (spe == sp+1) {
-							yaml_path_error_set(path, YAML_PATH_ERROR_PARSE, "Segment key is missing", sp - s_path);
-							goto error;
-						}
+						if (*spe == '\0')
+							return_with_error(YAML_PATH_ERROR_PARSE, "Segment key is invalid (unexpected end of string, missing closing quotation mark)", sp - s_path);
+						if (spe == sp+1)
+							return_with_error(YAML_PATH_ERROR_PARSE, "Segment key is missing", sp - s_path);
 						spe++;
-						if (*spe == '\0') {
-							yaml_path_error_set(path, YAML_PATH_ERROR_PARSE, "Segment key is invalid (unexpected end of string, missing ']')", sp - s_path);
-							goto error;
-						}
+						if (*spe == '\0')
+							return_with_error(YAML_PATH_ERROR_PARSE, "Segment key is invalid (unexpected end of string, missing ']')", sp - s_path);
 						if (*spe == ']') {
 							raw_keys[keys_count].start = sp + 1;
 							raw_keys[keys_count].len = spe-sp - 2;
 							keys_count++;
 						} else if (*spe == ',') {
 							spe++;
-							if (*spe != '\'' && *spe != '"') {
-								yaml_path_error_set(path, YAML_PATH_ERROR_PARSE, "Segment keys selection is invalid (invalid character)", spe - s_path);
-								goto error;
-							}
+							if (*spe != '\'' && *spe != '"')
+								return_with_error(YAML_PATH_ERROR_PARSE, "Segment keys selection is invalid (invalid character)", spe - s_path);
 							raw_keys[keys_count].start = sp + 1;
 							raw_keys[keys_count].len = spe-sp - 3;
 							keys_count++;
 							quote = *spe;
 							sp = spe;
 						} else {
-							yaml_path_error_set(path, YAML_PATH_ERROR_PARSE, "Segment key is invalid (invalid character)", spe - s_path);
-							goto error;
+							return_with_error(YAML_PATH_ERROR_PARSE, "Segment key is invalid (invalid character)", spe - s_path);
 						}
 					}
 					if (keys_count == 1) {
 						yaml_path_section_t *sec = yaml_path_section_create(path, YAML_PATH_SECTION_KEY);
+						if (sec == NULL)
+							return_with_error(YAML_PATH_ERROR_NOMEM, "Unable to allocate memory for the section", sp - s_path);
 						sec->data.key = strndup(raw_keys[0].start, raw_keys[0].len);
+						if (sec->data.key == NULL)
+							return_with_error(YAML_PATH_ERROR_NOMEM, "Unable to allocate memory for the key", sp - s_path);
 					} else if (keys_count > 1) {
-						if (yaml_path_has_selection_section(path)) {
-							yaml_path_error_set(path, YAML_PATH_ERROR_SECTION, "Only one selection segment is allowed to be in the path", sp - s_path);
-							goto error;
-						}
+						if (yaml_path_has_selection_section(path))
+							return_with_error(YAML_PATH_ERROR_SECTION, "Only one selection segment is allowed to be in the path", sp - s_path);
 						yaml_path_section_t *sec = yaml_path_section_create(path, YAML_PATH_SECTION_SELECTION);
-						yaml_path_selection_keys_add(&sec->data.selection, raw_keys, keys_count);
+						if (sec == NULL)
+							return_with_error(YAML_PATH_ERROR_NOMEM, "Unable to allocate memory for the section", sp - s_path);
+						if (yaml_path_selection_keys_add(&sec->data.selection, raw_keys, keys_count) != keys_count)
+							return_with_error(YAML_PATH_ERROR_NOMEM, "Unable to allocate memory for the keys selection", sp - s_path);
 					}
 					sp = spe;
 				} else {
@@ -327,6 +336,8 @@ yaml_path_parse_impl (yaml_path_t *path, char *s_path) {
 					if (*spe == ']') {
 						// Index
 						yaml_path_section_t *sec = yaml_path_section_create(path, YAML_PATH_SECTION_INDEX);
+						if (sec == NULL)
+							return_with_error(YAML_PATH_ERROR_NOMEM, "Unable to allocate memory for the section", sp - s_path);
 						sec->data.index = idx;
 						sp = spe;
 					} else if (*spe == ':') {
@@ -340,33 +351,32 @@ yaml_path_parse_impl (yaml_path_t *path, char *s_path) {
 							idx = strtol(spe, &spe, 10);
 							if (*spe == ']' && (idx > 0 || spe == sp+1)) {
 								yaml_path_section_t *sec = yaml_path_section_create(path, YAML_PATH_SECTION_SLICE);
+								if (sec == NULL)
+									return_with_error(YAML_PATH_ERROR_NOMEM, "Unable to allocate memory for the section", sp - s_path);
 								sec->data.slice.start = idx_start;
 								sec->data.slice.end = idx_end;
 								sec->data.slice.stride = idx > 0 ? idx : 1;
 								sp = spe;
 							} else if (*spe == ']' && idx <= 0) {
-								yaml_path_error_set(path, YAML_PATH_ERROR_PARSE, "Segment slice stride can not be less than 1", spe - s_path - 1);
-								goto error;
+								return_with_error(YAML_PATH_ERROR_PARSE, "Segment slice stride can not be less than 1", spe - s_path - 1);
 							} else {
-								yaml_path_error_set(path, YAML_PATH_ERROR_PARSE, "Segment slice stride is invalid (invalid character)", spe - s_path);
-								goto error;
+								return_with_error(YAML_PATH_ERROR_PARSE, "Segment slice stride is invalid (invalid character)", spe - s_path);
 							}
 						} else if (*spe == ']') {
 							yaml_path_section_t *sec = yaml_path_section_create(path, YAML_PATH_SECTION_SLICE);
+							if (sec == NULL)
+								return_with_error(YAML_PATH_ERROR_NOMEM, "Unable to allocate memory for the section", sp - s_path);
 							sec->data.slice.start = idx_start;
 							sec->data.slice.end = (spe == sp+1 ? __INT_MAX__ : idx);
 							sec->data.slice.stride = 1;
 							sp = spe;
 						} else {
-							yaml_path_error_set(path, YAML_PATH_ERROR_PARSE, "Segment slice end index is invalid (invalid character)", spe - s_path);
-							goto error;
+							return_with_error(YAML_PATH_ERROR_PARSE, "Segment slice end index is invalid (invalid character)", spe - s_path);
 						}
 					} else if (*spe == '\0') {
-						yaml_path_error_set(path, YAML_PATH_ERROR_PARSE, "Segment index is invalid (unxepected end of string, missing ']')", spe - s_path);
-						goto error;
+						return_with_error(YAML_PATH_ERROR_PARSE, "Segment index is invalid (unxepected end of string, missing ']')", spe - s_path);
 					} else {
-						yaml_path_error_set(path, YAML_PATH_ERROR_PARSE, "Segment index is invalid (invalid character)", spe - s_path);
-						goto error;
+						return_with_error(YAML_PATH_ERROR_PARSE, "Segment index is invalid (invalid character)", spe - s_path);
 					}
 				}
 			}
@@ -378,23 +388,26 @@ yaml_path_parse_impl (yaml_path_t *path, char *s_path) {
 					spe++;
 				if (spe - sp > 1) {
 					yaml_path_section_t *sec = yaml_path_section_create(path, YAML_PATH_SECTION_ANCHOR);
+					if (sec == NULL)
+						return_with_error(YAML_PATH_ERROR_NOMEM, "Unable to allocate memory for the section", sp - s_path);
 					sec->data.anchor = strndup(sp+1, spe-sp-1);
+					if (sec->data.anchor == NULL)
+						return_with_error(YAML_PATH_ERROR_NOMEM, "Unable to allocate memory for the anchor", sp - s_path);
 				} else {
-					yaml_path_error_set(path, YAML_PATH_ERROR_PARSE, "Segment anchor is invalid (empty)", spe - s_path);
-					goto error;
+					return_with_error(YAML_PATH_ERROR_PARSE, "Segment anchor is invalid (empty)", spe - s_path);
 				}
 			} else {
-				yaml_path_error_set(path, YAML_PATH_ERROR_SECTION, "Anchor segment is only allowed at the begining of the path", sp - s_path);
-				goto error;
+				return_with_error(YAML_PATH_ERROR_SECTION, "Anchor segment is only allowed at the begining of the path", sp - s_path);
 			}
 			sp = spe - 1;
 			break;
 		case '$':
 			if (path->sections_count == 0) {
-				yaml_path_section_create(path, YAML_PATH_SECTION_ROOT);
+				yaml_path_section_t *sec = yaml_path_section_create(path, YAML_PATH_SECTION_ROOT);
+				if (sec == NULL)
+					return_with_error(YAML_PATH_ERROR_NOMEM, "Unable to allocate memory for the section", sp - s_path);
 			} else {
-				yaml_path_error_set(path, YAML_PATH_ERROR_SECTION, "Root segment is only allowed at the begining of the path", sp - s_path);
-				goto error;
+				return_with_error(YAML_PATH_ERROR_SECTION, "Root segment is only allowed at the begining of the path", sp - s_path);
 			}
 			break;
 		default:
@@ -403,9 +416,15 @@ yaml_path_parse_impl (yaml_path_t *path, char *s_path) {
 				// Special start of the path (implicit key)
 				while (*spe != '.' && *spe != '[' && *spe != '\0')
 					spe++;
-				yaml_path_section_create(path, YAML_PATH_SECTION_ROOT);
-				yaml_path_section_t *sec = yaml_path_section_create(path, YAML_PATH_SECTION_KEY);
+				yaml_path_section_t *sec = yaml_path_section_create(path, YAML_PATH_SECTION_ROOT);
+				if (sec == NULL)
+					return_with_error(YAML_PATH_ERROR_NOMEM, "Unable to allocate memory for the section", sp - s_path);
+				sec = yaml_path_section_create(path, YAML_PATH_SECTION_KEY);
+				if (sec == NULL)
+					return_with_error(YAML_PATH_ERROR_NOMEM, "Unable to allocate memory for the section", sp - s_path);
 				sec->data.key = strndup(sp, spe-sp);
+				if (sec->data.key == NULL)
+					return_with_error(YAML_PATH_ERROR_NOMEM, "Unable to allocate memory for the key", sp - s_path);
 				sp = spe-1;
 			}
 			break;
@@ -413,11 +432,10 @@ yaml_path_parse_impl (yaml_path_t *path, char *s_path) {
 		sp++;
 	}
 
-	if (path->sections_count == 0) {
-		yaml_path_error_set(path, YAML_PATH_ERROR_SECTION, "Invalid, empty or meaningless path", 0);
-	}
+	if (path->sections_count == 0)
+		return_with_error(YAML_PATH_ERROR_SECTION, "Invalid, empty or meaningless path", 0);
 
-	return;
+	return; // OK
 
 error:
 	yaml_path_sections_remove(path);
@@ -526,10 +544,10 @@ yaml_path_t*
 yaml_path_create (void)
 {
 	yaml_path_t *ypath = malloc(sizeof(*ypath));
-	assert(ypath != NULL);
-	memset (ypath, 0, sizeof(*ypath));
-	TAILQ_INIT(&ypath->sections_list);
-
+	if (ypath != NULL) {
+		memset (ypath, 0, sizeof(*ypath));
+		TAILQ_INIT(&ypath->sections_list);
+	}
 	return ypath;
 }
 
