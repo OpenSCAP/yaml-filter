@@ -122,15 +122,6 @@ yaml_path_selection_keys_remove (path_key_list_t *selection)
 }
 
 static void
-yaml_path_error_set (yaml_path_t *path, yaml_path_error_type_t error_type, const char *message, size_t pos)
-{
-	assert(path != NULL);
-	path->error.type = error_type;
-	path->error.message = message;
-	path->error.pos = pos;
-}
-
-static void
 yaml_path_sections_remove (yaml_path_t *path)
 {
 	assert(path != NULL);
@@ -228,14 +219,29 @@ yaml_path_has_selection_section (yaml_path_t *path)
 }
 
 static void
-_parse (yaml_path_t *path, char *s_path) {
+yaml_path_error_set (yaml_path_t *path, yaml_path_error_type_t error_type, const char *message, size_t pos)
+{
+	assert(path != NULL);
+	path->error.type = error_type;
+	path->error.message = message;
+	path->error.pos = pos;
+}
+
+static void
+yaml_path_error_clear (yaml_path_t *path)
+{
+	yaml_path_error_set(path, YAML_PATH_ERROR_NONE, NULL, 0);
+}
+
+static void
+yaml_path_parse_impl (yaml_path_t *path, char *s_path) {
 	char *sp = s_path;
 	char *spe = NULL;
 
 	assert(path != NULL);
 
 	if (s_path == NULL || !s_path[0]) {
-		yaml_path_error_set(path, YAML_PATH_ERROR_PARSE, "Path is empty", 0);
+		yaml_path_error_set(path, YAML_PATH_ERROR_PARSE, "Path string is NULL or empty", 0);
 		return;
 	}
 
@@ -408,13 +414,15 @@ _parse (yaml_path_t *path, char *s_path) {
 	}
 
 	if (path->sections_count == 0) {
-		yaml_path_error_set(path, YAML_PATH_ERROR_SECTION, "Invalid or meaningless path", 0);
+		yaml_path_error_set(path, YAML_PATH_ERROR_SECTION, "Invalid, empty or meaningless path", 0);
 	}
 
 	return;
 
 error:
 	yaml_path_sections_remove(path);
+	if (path->error.type == YAML_PATH_ERROR_NONE)
+		yaml_path_error_set(path, YAML_PATH_ERROR_PARSE, "Unable to parse path", 0);
 }
 
 static yaml_path_section_t*
@@ -512,7 +520,7 @@ yaml_path_is_valid (yaml_path_t *path)
 }
 
 
-/* Public */
+/* Public API -------------------------------------------------------------- */
 
 yaml_path_t*
 yaml_path_create (void)
@@ -532,11 +540,10 @@ yaml_path_parse (yaml_path_t *path, char *s_path)
 		return -1;
 
 	yaml_path_sections_remove(path);
-	memset(&path->error, 0, sizeof(path->error));
+	yaml_path_error_clear(path);
 
-	_parse(path, s_path);
-
-	if (path->sections_count == 0)
+	yaml_path_parse_impl(path, s_path);
+	if (path->error.type != YAML_PATH_ERROR_NONE)
 		return -2;
 
 	return 0;
@@ -550,8 +557,6 @@ yaml_path_destroy (yaml_path_t *path)
 	yaml_path_sections_remove(path);
 	free(path);
 }
-
-/* API */
 
 const yaml_path_error_t*
 yaml_path_error_get (yaml_path_t *path)
@@ -614,11 +619,8 @@ yaml_path_filter_event (yaml_path_t *path, yaml_parser_t *parser, yaml_event_t *
 			}
 			break;
 		default:
-			//TODO: This path is invalid
 			break;
 		}
-	} else {
-		//TODO: ?
 	}
 
 	yaml_path_section_t *current_section = yaml_path_section_get_current(path);
