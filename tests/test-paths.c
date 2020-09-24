@@ -245,6 +245,7 @@ int main (int argc, char *argv[])
 	yp_test(".second[0]['abc','def'][0]","{'abc': 1, 'def': 11}");
 	yp_test(".second[:]['abc','def'][0]","[{'abc': 1, 'def': 11}, {'abc': 3, 'def': null}]");
 	yp_test(".second[:]['abc','def'].z", "[{'abc': null, 'def': null}, {'abc': null, 'def': '!'}]");
+	yp_test(".second[:].*.z",            "[{'abc': null, 'def': null, 'abcdef': null, 'z': null, 'q': null}, {'abc': null, 'def': '!', 'abcdef': null, 'z': null}]");
 	yp_test(".second[:]['abc','q']",     "[{'abc': &anc [1, 2], 'q': 'Q'}, {'abc': [3, 4]}]");
 	yp_test(".second[:]['abc','def'][:]","[{'abc': &anc [1, 2], 'def': [11, 22]}, {'abc': [3, 4], 'def': null}]");
 	yp_test(".second[0]['abc','def']",   "{'abc': &anc [1, 2], 'def': [11, 22]}");

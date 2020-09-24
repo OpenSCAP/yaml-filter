@@ -3,6 +3,7 @@
 #include <string.h>
 #include <sys/queue.h>
 #include <assert.h>
+#include <limits.h>
 
 #include <yaml.h>
 
@@ -10,9 +11,11 @@
 
 
 #define YAML_PATH_MAX_SECTION_LEN 1024
-#define YAML_PATH_MAX_SECTIONS    255
+#define YAML_PATH_MAX_SECTIONS    256
 #define YAML_PATH_MAX_LEN         YAML_PATH_MAX_SECTION_LEN * YAML_PATH_MAX_SECTIONS
 
+#define _STR(x) #x
+#define STR(x) _STR(x)
 
 typedef enum yaml_path_section_type {
 	YAML_PATH_SECTION_ROOT,
@@ -44,13 +47,13 @@ typedef struct yaml_path_section {
 		const char *key;
 		const char *anchor;
 		int index;
-		struct {int start, end, stride;} slice;
+		struct {ssize_t start, end, stride;} slice;
 		path_key_list_t selection;
 	} data;
 	TAILQ_ENTRY(yaml_path_section) entries;
 
 	yaml_node_type_t node_type;
-	int counter;
+	size_t counter;
 	bool valid;
 	bool next_valid;
 } yaml_path_section_t;
@@ -76,12 +79,23 @@ yaml_path_selection_snprint (path_key_list_t *selection, char *s, size_t max_len
 		return -1;
 	size_t len = 0;
 	yaml_path_key_t *el;
-	TAILQ_FOREACH(el, selection, entries) {
-		char quote = strchr(el->key, '\'') ? '"' : '\'';
-		len += snprintf(s + (len < max_len ? len : max_len), max_len - (len < max_len ? len : max_len), "%s%c%s%c", (len ? "," : "["), quote, el->key, quote);
+	if TAILQ_EMPTY(selection) {
+		len += snprintf(s, max_len, ".*");
+	} else {
+		TAILQ_FOREACH(el, selection, entries) {
+			char quote = strchr(el->key, '\'') ? '"' : '\'';
+			len += snprintf(s + (len < max_len ? len : max_len), max_len - (len < max_len ? len : max_len), "%s%c%s%c", (len ? "," : "["), quote, el->key, quote);
+		}
+		len += snprintf(s + (len < max_len ? len : max_len), max_len - (len < max_len ? len : max_len), "]");
 	}
-	len += snprintf(s + (len < max_len ? len : max_len), max_len - (len < max_len ? len : max_len), "]");
 	return len;
+}
+
+static bool
+yaml_path_selection_is_empty (path_key_list_t *selection)
+{
+	assert(selection != NULL);
+	return TAILQ_EMPTY(selection) ? true : false;
 }
 
 static const char*
@@ -155,6 +169,8 @@ yaml_path_sections_remove (yaml_path_t *path)
 static yaml_path_section_t*
 yaml_path_section_create (yaml_path_t *path, yaml_path_section_type_t section_type)
 {
+	if (path->sections_count == YAML_PATH_MAX_SECTIONS)
+		return NULL;
 	yaml_path_section_t *el = malloc(sizeof(*el));
 	if (el != NULL) {
 		memset(el, 0, sizeof(*el));
@@ -183,7 +199,7 @@ yaml_path_section_snprint (yaml_path_section_t *section, char *s, size_t max_len
 		break;
 	case YAML_PATH_SECTION_KEY: {
 			char quote = '\0';
-			if (strpbrk(section->data.key, "[]().$&"))
+			if (strpbrk(section->data.key, "[]().$&*"))
 				quote = strchr(section->data.key, '\'') ? '"' : '\'';
 			if (quote) {
 				len = snprintf(s, max_len, "[%c%s%c]", quote, section->data.key, quote);
@@ -199,7 +215,7 @@ yaml_path_section_snprint (yaml_path_section_t *section, char *s, size_t max_len
 		len = snprintf(s, max_len, "[%d]", section->data.index);
 		break;
 	case YAML_PATH_SECTION_SLICE:
-		len = snprintf(s, max_len, "[%d:%d:%d]", section->data.slice.start, section->data.slice.end, section->data.slice.stride);
+		len = snprintf(s, max_len, "[%zi:%zi:%zi]", section->data.slice.start, section->data.slice.end, section->data.slice.stride);
 		break;
 	case YAML_PATH_SECTION_SELECTION:
 		len = yaml_path_selection_snprint(&section->data.selection, s, max_len);
@@ -239,9 +255,9 @@ yaml_path_error_clear (yaml_path_t *path)
 }
 
 #define return_with_error(error_type, error_text, error_pos)          \
-do {                                                \
+do {                                                                  \
 	yaml_path_error_set(path, error_type, (error_text), (error_pos)); \
-	goto error;                                     \
+	goto error;                                                       \
 } while (0)
 
 static void
@@ -268,14 +284,25 @@ yaml_path_parse_impl (yaml_path_t *path, char *s_path) {
 			if (*sp == '.') {
 				// Key
 				spe = sp + 1;
-				while (*spe != '.' && *spe != '[' && *spe != '\0')
-					spe++;
-				if (spe == sp+1)
-					return_with_error(YAML_PATH_ERROR_PARSE, "Segment key is missing", sp - s_path);
-				yaml_path_section_t *sec = yaml_path_section_create(path, YAML_PATH_SECTION_KEY);
-				sec->data.key = strndup(sp + 1, spe-sp - 1);
-				if (sec->data.key == NULL)
-					return_with_error(YAML_PATH_ERROR_NOMEM, "Unable to allocate memory for the key", sp - s_path);
+				if (*spe == '*') {
+					// Empty key selection section means that all keys were selected
+					yaml_path_section_t *sec = yaml_path_section_create(path, YAML_PATH_SECTION_SELECTION);
+					if (sec == NULL)
+						return_with_error(YAML_PATH_ERROR_NOMEM, "Unable to allocate memory for the section", sp - s_path);
+					while (*spe != '.' && *spe != '[' && *spe != '\0')
+						spe++;
+				} else {
+					while (*spe != '.' && *spe != '[' && *spe != '\0')
+						spe++;
+					if (spe == sp+1)
+						return_with_error(YAML_PATH_ERROR_PARSE, "Segment key is missing", sp - s_path);
+					yaml_path_section_t *sec = yaml_path_section_create(path, YAML_PATH_SECTION_KEY);
+					if (sec == NULL)
+						return_with_error(YAML_PATH_ERROR_NOMEM, "Unable to allocate memory for the section", sp - s_path);
+					sec->data.key = strndup(sp + 1, spe-sp - 1);
+					if (sec->data.key == NULL)
+						return_with_error(YAML_PATH_ERROR_NOMEM, "Unable to allocate memory for the key", sp - s_path);
+				}
 				sp = spe - 1;
 			} else if (*sp == '[') {
 				spe = sp + 1;
@@ -285,6 +312,8 @@ yaml_path_parse_impl (yaml_path_t *path, char *s_path) {
 					yaml_path_selection_key_raw_t raw_keys[YAML_PATH_MAX_SECTIONS] = {{NULL, 0}};
 					sp = spe;
 					while (*spe != ']' && *spe != '\0') {
+						if (keys_count == YAML_PATH_MAX_SECTIONS)
+							return_with_error(YAML_PATH_ERROR_SECTION, "Segment keys selection has reached the limit of keys: "STR(YAML_PATH_MAX_SECTIONS), sp - s_path);
 						char quote = *spe;
 						spe++;
 						while (*spe != quote && *spe != '\0')
@@ -346,7 +375,7 @@ yaml_path_parse_impl (yaml_path_t *path, char *s_path) {
 						sp = spe++;
 						idx = strtol(spe, &spe, 10);
 						if (*spe == ':') {
-							int idx_end = (spe == sp+1 ? __INT_MAX__ : idx);
+							int idx_end = (spe == sp+1 ? _POSIX_SSIZE_MAX : idx);
 							sp = spe++;
 							idx = strtol(spe, &spe, 10);
 							if (*spe == ']' && (idx > 0 || spe == sp+1)) {
@@ -367,7 +396,7 @@ yaml_path_parse_impl (yaml_path_t *path, char *s_path) {
 							if (sec == NULL)
 								return_with_error(YAML_PATH_ERROR_NOMEM, "Unable to allocate memory for the section", sp - s_path);
 							sec->data.slice.start = idx_start;
-							sec->data.slice.end = (spe == sp+1 ? __INT_MAX__ : idx);
+							sec->data.slice.end = (spe == sp+1 ? _POSIX_SSIZE_MAX : idx);
 							sec->data.slice.stride = 1;
 							sp = spe;
 						} else {
@@ -671,8 +700,8 @@ yaml_path_filter_event (yaml_path_t *path, yaml_parser_t *parser, yaml_event_t *
 						current_section->valid = current_section->next_valid;
 						current_section->next_valid = false;
 					} else {
-						const char *key = yaml_path_selection_key_get(&current_section->data.selection, (const char *)event->data.scalar.value);
-						current_section->next_valid = (key != NULL);
+						current_section->next_valid = yaml_path_selection_is_empty(&current_section->data.selection)
+						                              || yaml_path_selection_key_get(&current_section->data.selection, (const char *)event->data.scalar.value) != NULL;
 						current_section->valid = current_section->next_valid;
 					}
 				} else {
@@ -680,12 +709,13 @@ yaml_path_filter_event (yaml_path_t *path, yaml_parser_t *parser, yaml_event_t *
 				}
 				break;
 			case YAML_SEQUENCE_NODE:
+				// TODO: We do not support negative indexes due to the nature of the filtering process (event flow)
 				if (current_section->type == YAML_PATH_SECTION_INDEX) {
-					current_section->valid = current_section->data.index == current_section->counter;
+					current_section->valid = current_section->data.index == (ssize_t) current_section->counter;
 				} else if (current_section->type == YAML_PATH_SECTION_SLICE) {
-					current_section->valid = current_section->data.slice.start <= current_section->counter &&
-					                         current_section->data.slice.end > current_section->counter &&
-					                         (current_section->data.slice.start + current_section->counter) % current_section->data.slice.stride == 0;
+					current_section->valid = current_section->data.slice.start <= (ssize_t) current_section->counter &&
+					                         current_section->data.slice.end > (ssize_t) current_section->counter &&
+					                         (current_section->data.slice.start + (ssize_t) current_section->counter) % current_section->data.slice.stride == 0;
 				} else {
 					current_section->valid = false;
 				}
