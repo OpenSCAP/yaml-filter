@@ -561,7 +561,7 @@ yaml_path_snprint (yaml_path_t *path, char *s, size_t max_len)
 }
 
 yaml_path_filter_result_t
-yaml_path_filter_event (yaml_path_t *path, yaml_parser_t *parser, yaml_event_t *event, yaml_path_filter_mode_t mode)
+yaml_path_filter_event (yaml_path_t *path, yaml_parser_t *parser, yaml_event_t *event)
 {
 	if (path == NULL || parser == NULL || event == NULL)
 		return YAML_PATH_FILTER_RESULT_OUT;
@@ -686,9 +686,8 @@ yaml_path_filter_event (yaml_path_t *path, yaml_parser_t *parser, yaml_event_t *
 					res = YAML_PATH_FILTER_RESULT_IN;
 		} else {
 			if (path->current_level > path->start_level) {
-				if (mode == YAML_PATH_FILTER_RETURN_ALL)
-					if (yaml_path_is_valid(path))
-						res = YAML_PATH_FILTER_RESULT_IN;
+				if (yaml_path_is_valid(path))
+					res = YAML_PATH_FILTER_RESULT_IN;
 			}
 		}
 		path->current_level++;
@@ -717,7 +716,7 @@ yaml_path_filter_event (yaml_path_t *path, yaml_parser_t *parser, yaml_event_t *
 					res = YAML_PATH_FILTER_RESULT_IN;
 		} else {
 			if (path->current_level > path->start_level) {
-				if (mode == YAML_PATH_FILTER_RETURN_ALL && yaml_path_is_valid(path))
+				if (yaml_path_is_valid(path))
 					res = YAML_PATH_FILTER_RESULT_IN;
 			}
 		}
@@ -725,7 +724,7 @@ yaml_path_filter_event (yaml_path_t *path, yaml_parser_t *parser, yaml_event_t *
 	case YAML_ALIAS_EVENT:
 	case YAML_SCALAR_EVENT:
 		if (!current_section) {
-			if ((mode == YAML_PATH_FILTER_RETURN_ALL && path->current_level > path->start_level) || path->current_level == path->start_level)
+			if (path->current_level >= path->start_level)
 				if (yaml_path_is_valid(path))
 					res = YAML_PATH_FILTER_RESULT_IN;
 		} else {

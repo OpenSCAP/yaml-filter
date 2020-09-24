@@ -10,7 +10,7 @@
 
 
 static int
-parse_and_emit (yaml_parser_t *parser, yaml_emitter_t *emitter, yaml_path_t *path, yaml_path_filter_mode_t mode, int use_flow_style)
+parse_and_emit (yaml_parser_t *parser, yaml_emitter_t *emitter, yaml_path_t *path, int use_flow_style)
 {
 	yaml_event_t event;
 	yaml_event_type_t event_type, prev_event_type = YAML_NO_EVENT;
@@ -55,7 +55,7 @@ parse_and_emit (yaml_parser_t *parser, yaml_emitter_t *emitter, yaml_path_t *pat
 			return 1;
 		} else {
 			event_type = event.type;
-			result = yaml_path_filter_event(path, parser, &event, mode);
+			result = yaml_path_filter_event(path, parser, &event);
 			if (result == YAML_PATH_FILTER_RESULT_OUT) {
 				yaml_event_delete(&event);
 			} else {
@@ -113,7 +113,7 @@ help (void)
 {
 	printf("yamlp - filtering utility for YAML documents\n");
 	printf("\n");
-	printf("Usage: yamlp [-F] [-S] [-W <width>] [-f <file>] <path>\n");
+	printf("Usage: yamlp [-F] [-W <width>] [-f <file>] <path>\n");
 	printf("       yamlp -h\n");
 	printf("\n");
 	printf("The tool will take the input YAML document from <stdin> or a <file> (-f option),\n");
@@ -127,8 +127,6 @@ help (void)
 	printf("\n");
 	printf("  -h	help;\n");
 	printf("\n");
-	printf("  -S	'shallow' filter mode;\n");
-	printf("\n");
 	printf("  -W	line wrap width, no wrapping if omitted.\n");
 	printf("\n");
 }
@@ -139,7 +137,6 @@ int main(int argc, char *argv[])
 	char *file_name = NULL;
 	char *path_string = NULL;
 	int wrap = -1;
-	yaml_path_filter_mode_t mode = YAML_PATH_FILTER_RETURN_ALL;
 
 	int opt;
 	while ((opt = getopt(argc, argv, ":f:W:vhSF")) != -1) {
@@ -150,9 +147,6 @@ int main(int argc, char *argv[])
 			break;
 		case 'F':
 			flow = 1;
-			break;
-		case 'S':
-			mode = YAML_PATH_FILTER_RETURN_SHALLOW;
 			break;
 		case 'W':
 			wrap = strtol(optarg, NULL, 10);
@@ -210,7 +204,7 @@ int main(int argc, char *argv[])
 	yaml_emitter_set_output_file(&emitter, stdout);
 	yaml_emitter_set_width(&emitter, wrap);
 
-	if (parse_and_emit(&parser, &emitter, path, mode, flow)) {
+	if (parse_and_emit(&parser, &emitter, path, flow)) {
 		return 4;
 	}
 

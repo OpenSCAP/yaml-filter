@@ -62,9 +62,6 @@ yaml_out[YAML_STRING_LEN] = {0};
 static size_t
 yaml_out_len = 0;
 
-static yaml_path_filter_mode_t
-mode = YAML_PATH_FILTER_RETURN_ALL;
-
 static int
 test_result = 0;
 
@@ -130,7 +127,7 @@ yp_run (char *path)
 			goto error;
 		} else {
 			event_type = event.type;
-			result = yaml_path_filter_event(yp, &parser, &event, mode);
+			result = yaml_path_filter_event(yp, &parser, &event);
 			if (result == YAML_PATH_FILTER_RESULT_OUT) {
 				yaml_event_delete(&event);
 			} else {
@@ -222,12 +219,6 @@ int main (int argc, char *argv[])
 
 	//       Path                         Expected filtered YAML result
 
-	mode = YAML_PATH_FILTER_RETURN_SHALLOW;
-	yp_test(".first",                    "{}");
-	yp_test(".first.Nop",                "0");
-	yp_test(".first.Map",                "{}");
-
-	mode = YAML_PATH_FILTER_RETURN_ALL;
 	yp_test("$.first.Map",               "{1: '1'}");
 	yp_test(".first",                    "{'Map': {1: '1'}, 'Nop': 0, 'Yep': '1', 'Arr': [[11, 12], 2, ['31', '32'], [4, 5, 6, 7, 8, 9], {'k': 'val', 0: 0}]}");
 	yp_test(".first.Nop",                "0");
