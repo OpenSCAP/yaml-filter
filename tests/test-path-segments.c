@@ -76,9 +76,18 @@ int main (int argc, char *argv[])
 	yp_test_good("&anc[0].zzz");
 
 	yp_test_good("el['key']");
+	yp_test_good("el[\"key\"]");
+	yp_test_good("el[\"k[]ey\"]");
+	yp_test_good("el[\"k'ey\"]");
+	yp_test_good("el['k\"ey']");
+	yp_test_good("el.k\"ey");
+	yp_test_good("el.k$ey");
+	yp_test_good("el.k'&'ey");
 	yp_test_good("el['key'].other[0]['key']");
 
 	yp_test_good("el['first','other']");
+	yp_test_good("el[\"first\",\"other\"]");
+	yp_test_good("el[\"first\",'other']");
 
 	yp_test_invalid("$$");
 	yp_test_invalid("$&");
@@ -106,6 +115,9 @@ int main (int argc, char *argv[])
 	yp_test_invalid("el['key].wrong");
 	yp_test_invalid("el['key.wrong");
 	yp_test_invalid("el['key'");
+	yp_test_invalid("el['key\"]");
+	yp_test_invalid("el[\"key']");
+	yp_test_invalid("el['k'ey']");
 
 	yp_test_invalid("el['key';'wrong']");
 	yp_test_invalid("el['key',]");

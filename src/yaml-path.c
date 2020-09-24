@@ -23,12 +23,19 @@ typedef enum yaml_path_section_type {
 	YAML_PATH_SECTION_SELECTION,
 } yaml_path_section_type_t;
 
+typedef struct yaml_path_selection_key_raw {
+	const char *start;
+	size_t len;
+} yaml_path_selection_key_raw_t;
+
+
 typedef struct yaml_path_key {
 	const char *key;
 	TAILQ_ENTRY(yaml_path_key) entries;
 } yaml_path_key_t;
 
 typedef TAILQ_HEAD(path_key_list, yaml_path_key) path_key_list_t;
+
 
 typedef struct yaml_path_section {
 	yaml_path_section_type_t type;
@@ -50,6 +57,7 @@ typedef struct yaml_path_section {
 
 typedef TAILQ_HEAD(path_section_list, yaml_path_section) path_section_list_t;
 
+
 struct yaml_path {
 	path_section_list_t sections_list;
 	size_t sections_count;
@@ -69,7 +77,8 @@ yaml_path_selection_snprint (path_key_list_t *selection, char *s, size_t max_len
 	size_t len = 0;
 	yaml_path_key_t *el;
 	TAILQ_FOREACH(el, selection, entries) {
-		len += snprintf(s + (len < max_len ? len : max_len), max_len - (len < max_len ? len : max_len), "%s'%s'", (len ? "," : "["), el->key);
+		char quote = strchr(el->key, '\'') ? '"' : '\'';
+		len += snprintf(s + (len < max_len ? len : max_len), max_len - (len < max_len ? len : max_len), "%s%c%s%c", (len ? "," : "["), quote, el->key, quote);
 	}
 	len += snprintf(s + (len < max_len ? len : max_len), max_len - (len < max_len ? len : max_len), "]");
 	return len;
@@ -88,23 +97,16 @@ yaml_path_selection_key_get (path_key_list_t *selection, const char *key)
 }
 
 static void
-yaml_path_selection_keys_add (path_key_list_t *selection, const char *keys, size_t len)
+yaml_path_selection_keys_add (path_key_list_t *selection, yaml_path_selection_key_raw_t *raw_keys, size_t count)
 {
 	assert(selection != NULL);
-	char *s_str, *str, *token;
-	char *keysc = strndup(keys, len);
-
-	int i;
-	for (i = 1, str = keysc; ; i++, str = NULL) {
-		token = strtok_r(str, "',", &s_str);
-		if (token == NULL)
-			break;
+	assert(raw_keys != NULL);
+	for (size_t i = 0; i < count; i++) {
 		yaml_path_key_t *el = malloc(sizeof(*el));
-		el->key = strdup(token);
+		assert(el != NULL);
+		el->key = strndup(raw_keys[i].start, raw_keys[i].len);
 		TAILQ_INSERT_TAIL(selection, el, entries);
 	}
-
-	free(keysc);
 }
 
 static void
@@ -183,8 +185,16 @@ yaml_path_section_snprint (yaml_path_section_t *section, char *s, size_t max_len
 	case YAML_PATH_SECTION_ROOT:
 		len = snprintf(s, max_len, "$");
 		break;
-	case YAML_PATH_SECTION_KEY:
-		len = snprintf(s, max_len, ".%s", section->data.key);
+	case YAML_PATH_SECTION_KEY: {
+			char quote = '\0';
+			if (strpbrk(section->data.key, "[]().$&"))
+				quote = strchr(section->data.key, '\'') ? '"' : '\'';
+			if (quote) {
+				len = snprintf(s, max_len, "[%c%s%c]", quote, section->data.key, quote);
+			} else {
+				len = snprintf(s, max_len, ".%s", section->data.key);
+			}
+		}
 		break;
 	case YAML_PATH_SECTION_ANCHOR:
 		len = snprintf(s, max_len, "&%s", section->data.anchor);
@@ -250,51 +260,59 @@ _parse (yaml_path_t *path, char *s_path) {
 				sp = spe - 1;
 			} else if (*sp == '[') {
 				spe = sp + 1;
-				if (*spe == '\'') {
+				if (*spe == '\'' || *spe == '"') {
 					// Key(s)
-					int keys = 0;
+					size_t keys_count = 0;
+					yaml_path_selection_key_raw_t raw_keys[YAML_PATH_MAX_SECTIONS] = {{NULL, 0}};
 					sp = spe;
 					while (*spe != ']' && *spe != '\0') {
+						char quote = *spe;
 						spe++;
-						while (*spe != '\'' && *spe != '\0')
+						while (*spe != quote && *spe != '\0')
 							spe++;
+						if (*spe == '\0') {
+							yaml_path_error_set(path, YAML_PATH_ERROR_PARSE, "Segment key is invalid (unexpected end of string, missing closing quotation mark)", sp - s_path);
+							goto error;
+						}
 						if (spe == sp+1) {
 							yaml_path_error_set(path, YAML_PATH_ERROR_PARSE, "Segment key is missing", sp - s_path);
 							goto error;
 						}
-						if (*spe == '\0') {
-							yaml_path_error_set(path, YAML_PATH_ERROR_PARSE, "Segment key is invalid (unxepected end of string, missing ''')", sp - s_path);
-							goto error;
-						}
 						spe++;
 						if (*spe == '\0') {
-							yaml_path_error_set(path, YAML_PATH_ERROR_PARSE, "Segment key is invalid (unxepected end of string, missing ']')", sp - s_path);
+							yaml_path_error_set(path, YAML_PATH_ERROR_PARSE, "Segment key is invalid (unexpected end of string, missing ']')", sp - s_path);
 							goto error;
 						}
 						if (*spe == ']') {
-							keys++;
+							raw_keys[keys_count].start = sp + 1;
+							raw_keys[keys_count].len = spe-sp - 2;
+							keys_count++;
 						} else if (*spe == ',') {
-							keys++;
 							spe++;
-							if (*spe != '\'') {
+							if (*spe != '\'' && *spe != '"') {
 								yaml_path_error_set(path, YAML_PATH_ERROR_PARSE, "Segment keys selection is invalid (invalid character)", spe - s_path);
 								goto error;
 							}
+							raw_keys[keys_count].start = sp + 1;
+							raw_keys[keys_count].len = spe-sp - 3;
+							keys_count++;
+							quote = *spe;
+							sp = spe;
 						} else {
 							yaml_path_error_set(path, YAML_PATH_ERROR_PARSE, "Segment key is invalid (invalid character)", spe - s_path);
 							goto error;
 						}
 					}
-					if (keys == 1) {
+					if (keys_count == 1) {
 						yaml_path_section_t *sec = yaml_path_section_create(path, YAML_PATH_SECTION_KEY);
-						sec->data.key = strndup(sp + 1, spe-sp - 2);
-					} else if (keys > 1) {
+						sec->data.key = strndup(raw_keys[0].start, raw_keys[0].len);
+					} else if (keys_count > 1) {
 						if (yaml_path_has_selection_section(path)) {
 							yaml_path_error_set(path, YAML_PATH_ERROR_SECTION, "Only one selection segment is allowed to be in the path", sp - s_path);
 							goto error;
 						}
 						yaml_path_section_t *sec = yaml_path_section_create(path, YAML_PATH_SECTION_SELECTION);
-						yaml_path_selection_keys_add(&sec->data.selection, sp, spe-sp);
+						yaml_path_selection_keys_add(&sec->data.selection, raw_keys, keys_count);
 					}
 					sp = spe;
 				} else {
@@ -500,7 +518,6 @@ yaml_path_t*
 yaml_path_create (void)
 {
 	yaml_path_t *ypath = malloc(sizeof(*ypath));
-
 	assert(ypath != NULL);
 	memset (ypath, 0, sizeof(*ypath));
 	TAILQ_INIT(&ypath->sections_list);
