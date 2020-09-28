@@ -73,7 +73,11 @@ yp_run (char *path)
 	int res = 0;
 
 	yaml_path_t *yp = yaml_path_create();
-	yaml_path_parse(yp, path);
+	if (yaml_path_parse(yp, path)) {
+		printf("Path error: %s\n", yaml_path_error_get(yp)->message);
+		yaml_path_destroy(yp);
+		return 1;
+	}
 
 	//char spath[YAML_STRING_LEN] = {0};
 	//yaml_path_snprint(yp, spath, YAML_STRING_LEN);
@@ -196,6 +200,8 @@ yp_test (char *path, char *yaml_exp)
 
 int main (int argc, char *argv[])
 {
+    (void) argc; (void) argv; // Yep, we don't need them
+
 	yaml =
 		"{"
 			"first: {"
@@ -230,20 +236,15 @@ int main (int argc, char *argv[])
 	yp_test(".first.Arr[0]",             "[11, 12]");
 	yp_test(".first.Arr[1]",             "2");
 	yp_test(".first.Arr[2][0]",          "'31'");
-	yp_test(".first.Arr[:2][0]",         "[11]");
 	yp_test(".first.Arr[3][:]",          "[4, 5, 6, 7, 8, 9]");
 	yp_test(".first.Arr[:][:]",          "[[11, 12], ['31', '32'], [4, 5, 6, 7, 8, 9]]");
 	yp_test(".first.Arr[4].k",           "'val'");
 	yp_test(".first.Arr[:][0]",          "[11, '31', 4]");
 	yp_test(".first.Arr[:].k",           "['val']");
 	yp_test(".first.Arr[:][2]",          "[6]");
-	yp_test(".first.Arr[3][1::2]",       "[5, 7, 9]");
-	yp_test(".first.Arr[3][::2]",        "[4, 6, 8]");
-	yp_test(".first.Arr[3][:4:2]",       "[4, 6]");
 	yp_test(".first.Arr[:][0,1]",        "[[11, 12], ['31', '32'], [4, 5]]");
 	yp_test(".first.Arr[:][1]",          "[12, '32', 5]");
 	yp_test(".second[2].abc",            "null");
-	yp_test(".second[0:2].abc",          "[&anc [1, 2], [3, 4]]");
 	yp_test(".second[0].z",              "*anc");
 	yp_test("&anc",                      "&anc [1, 2]");
 	yp_test("&anc[0]",                   "1");

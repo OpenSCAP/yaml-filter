@@ -47,7 +47,9 @@ yp_test (char *p, int expected_failure)
 
 int main (int argc, char *argv[])
 {
-	yp_test_good(".first");
+    (void) argc; (void) argv; // Yep, we don't need them
+
+    yp_test_good(".first");
 	yp_test_good(".first[0]");
 	yp_test_good(".first.second[0].third");
 	yp_test_good(".first.0");
@@ -59,17 +61,9 @@ int main (int argc, char *argv[])
 	yp_test_good("!");
 	yp_test_good("$");
 
-	yp_test_good("[0:0]");
-	yp_test_good("[0:0:1]");
-	yp_test_good("[100:]");
-	yp_test_good("[100::]");
-	yp_test_good("[:100]");
-	yp_test_good("[:100:]");
 	yp_test_good("[:]");
 	yp_test_good("[':']['*'][:]");
 	yp_test_good(".:.*[:]");
-	yp_test_good("[::]");
-	yp_test_good("[-03:-200:+500]");
 	yp_test_good("[0,2,3,4,5,20,180]");
 
 	yp_test_good("&anc");
@@ -102,6 +96,18 @@ int main (int argc, char *argv[])
 	yp_test_invalid("");
 	yp_test_invalid(".");
 	yp_test_invalid("element[");
+
+	yp_test_invalid("[-5]");
+	yp_test_invalid("[1,-5]");
+
+	yp_test_invalid("[0:0]");
+	yp_test_invalid("[0:0:1]");
+	yp_test_invalid("[100:]");
+	yp_test_invalid("[100::]");
+	yp_test_invalid("[:100]");
+	yp_test_invalid("[:100:]");
+	yp_test_invalid("[::]");
+	yp_test_invalid("[-03:-200:+500]");
 
 	yp_test_invalid("[0:0:0]");
 	yp_test_invalid("[::-1]");
