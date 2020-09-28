@@ -85,6 +85,7 @@ int main (int argc, char *argv[])
 	yp_test_good("el[\"first\",'other']");
 	yp_test_good("el['key','valid']['now','allowed']");
 	yp_test_good("el.*");
+	yp_test_good("el[*]");
 	yp_test_good("el['*']");
 
 	yp_test_invalid("$$");
@@ -126,6 +127,7 @@ int main (int argc, char *argv[])
 	yp_test_invalid("el[&anchor][100]");
 
 	yp_test_invalid("el[']");
+	yp_test_invalid("[*'");
 	yp_test_invalid("el['key].wrong");
 	yp_test_invalid("el['key.wrong");
 	yp_test_invalid("el['key'");
@@ -137,7 +139,6 @@ int main (int argc, char *argv[])
 	yp_test_invalid("el['key',]");
 	yp_test_invalid("el['key',invalid]");
 	yp_test_invalid("el['first',]");
-	yp_test_invalid("el[*]");
 
 	return test_result;
 }

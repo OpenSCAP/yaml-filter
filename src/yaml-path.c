@@ -322,10 +322,16 @@ yaml_path_parse_impl (yaml_path_t *path, char *s_path) {
 					if (sec->data.key == NULL)
 						return_with_error(YAML_PATH_ERROR_NOMEM, "Unable to allocate memory (key)", sp - s_path);
 				}
-				sp = spe - 1;
+				sp = spe-1;
 			} else if (*sp == '[') {
 				spe = sp + 1;
-				if (*spe == '\'' || *spe == '"') {
+				if (*spe == '*' && *(spe+1) == ']') {
+					// Empty key selection section means that all keys were selected
+					yaml_path_section_t *sec = yaml_path_section_create(path, YAML_PATH_SECTION_SELECTION);
+					if (sec == NULL)
+						return_with_error(YAML_PATH_ERROR_NOMEM, "Unable to allocate memory (section)", sp - s_path);
+					sp = spe+1;
+				} else if (*spe == '\'' || *spe == '"') {
 					// Key(s)
 					size_t keys_count = 0;
 					yaml_path_selection_key_raw_t raw_keys[YAML_PATH_MAX_SECTION_ITEMS] = {{NULL, 0}};
