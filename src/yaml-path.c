@@ -192,7 +192,7 @@ yaml_path_section_snprint (yaml_path_section_t *section, char *s, size_t max_len
 	assert(section != NULL);
 	if (s == NULL)
 		return -1;
-	size_t len = 0;
+	size_t len;
 	switch (section->type) {
 	case YAML_PATH_SECTION_ROOT:
 		len = snprintf(s, max_len, "$");
@@ -336,7 +336,6 @@ yaml_path_parse_impl (yaml_path_t *path, char *s_path) {
 							raw_keys[keys_count].start = sp + 1;
 							raw_keys[keys_count].len = spe-sp - 3;
 							keys_count++;
-							quote = *spe;
 							sp = spe;
 						} else {
 							return_with_error(YAML_PATH_ERROR_PARSE, "Segment key is invalid (invalid character)", spe - s_path);
@@ -487,7 +486,6 @@ yaml_path_section_get_at_level (yaml_path_t *path, size_t level)
 static yaml_path_section_t*
 yaml_path_section_get_first (yaml_path_t *path)
 {
-	assert(path != NULL);
 	return yaml_path_section_get_at_level(path, 1);
 }
 

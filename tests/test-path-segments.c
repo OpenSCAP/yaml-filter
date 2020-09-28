@@ -2,8 +2,6 @@
 // Copyright (c) 2020 Red Hat Inc., Durham, North Carolina.
 
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 
 #include "yaml-path.h"
 

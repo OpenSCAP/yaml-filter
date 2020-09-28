@@ -17,7 +17,6 @@ parse_and_emit (yaml_parser_t *parser, yaml_emitter_t *emitter, yaml_path_t *pat
 	yaml_path_filter_result_t result, prev_result = YAML_PATH_FILTER_RESULT_OUT;
 
 	do {
-
 		if (!yaml_parser_parse(parser, &event)) {
 			switch (parser->error) {
 			case YAML_MEMORY_ERROR:
@@ -136,7 +135,7 @@ int main(int argc, char *argv[])
 	int flow = 0;
 	char *file_name = NULL;
 	char *path_string = NULL;
-	int wrap = -1;
+	long wrap = -1;
 
 	int opt;
 	while ((opt = getopt(argc, argv, ":f:W:vhSF")) != -1) {
@@ -144,7 +143,6 @@ int main(int argc, char *argv[])
 		case 'h':
 			help();
 			return 0;
-			break;
 		case 'F':
 			flow = 1;
 			break;
@@ -161,11 +159,12 @@ int main(int argc, char *argv[])
 		case ':':
 			fprintf(stderr, "Option needs a value\n");
 			return 1;
-			break;
 		case '?':
 			fprintf(stderr, "Unknown option '%c'\n", optopt);
 			return 1;
-			break;
+        default:
+            fprintf(stderr, "Unhandled option '%c'\n", opt);
+            return 1;
 		}
 	}
 
@@ -192,7 +191,7 @@ int main(int argc, char *argv[])
 		fprintf(stderr, "Invalid path: '%s'\n", path_string);
 		fprintf(stderr, "               %*s^ %s [at position %zu]\n", (int)yaml_path_error_get(path)->pos, " ", yaml_path_error_get(path)->message, yaml_path_error_get(path)->pos);
 		return 3;
-	};
+	}
 
 	yaml_parser_t parser;
 	yaml_emitter_t emitter;
@@ -202,7 +201,7 @@ int main(int argc, char *argv[])
 
 	yaml_emitter_initialize(&emitter);
 	yaml_emitter_set_output_file(&emitter, stdout);
-	yaml_emitter_set_width(&emitter, wrap);
+	yaml_emitter_set_width(&emitter, (int) wrap);
 
 	if (parse_and_emit(&parser, &emitter, path, flow)) {
 		return 4;

@@ -16,7 +16,6 @@ typedef enum yaml_path_error_type {
 typedef struct yaml_path_error {
 	yaml_path_error_type_t type;
 	const char *message;
-	const char *context;
 	size_t pos;
 } yaml_path_error_t;
 
