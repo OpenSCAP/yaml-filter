@@ -213,6 +213,11 @@ int main (int argc, char *argv[])
 			"second: ["
 				"{'abc': &anc [1, 2], 'def': [11, 22], 'abcdef': 2, 'z': *anc, 'q': 'Q'},"
 				"{'abc': [3, 4], 'def': {'z': '!'}, 'abcdef': 4, 'z': 'zzz'}"
+			"],"
+			"3rd: ["
+				"{'a': {'A': [0, 1], 'AA': [2, 3]}, 'b': {'A': [10, 11], 'BB': [9, 8]}},"
+				"{'z': {'A': [0, 1], 'BB': [22, 33]}},"
+				"&x {'q': [1, 2]},"
 			"]"
 		"}";
 
@@ -227,7 +232,7 @@ int main (int argc, char *argv[])
 	yp_test(".first.Arr[2][0]",          "'31'");
 	yp_test(".first.Arr[:2][0]",         "[11]");
 	yp_test(".first.Arr[3][:]",          "[4, 5, 6, 7, 8, 9]");
-	yp_test(".first.Arr[:][:]",          "[11, 12, '31', '32', 4, 5, 6, 7, 8, 9]");
+	yp_test(".first.Arr[:][:]",          "[[11, 12], ['31', '32'], [4, 5, 6, 7, 8, 9]]");
 	yp_test(".first.Arr[4].k",           "'val'");
 	yp_test(".first.Arr[:][0]",          "[11, '31', 4]");
 	yp_test(".first.Arr[:].k",           "['val']");
@@ -235,6 +240,8 @@ int main (int argc, char *argv[])
 	yp_test(".first.Arr[3][1::2]",       "[5, 7, 9]");
 	yp_test(".first.Arr[3][::2]",        "[4, 6, 8]");
 	yp_test(".first.Arr[3][:4:2]",       "[4, 6]");
+	yp_test(".first.Arr[:][0,1]",        "[[11, 12], ['31', '32'], [4, 5]]");
+	yp_test(".first.Arr[:][1]",          "[12, '32', 5]");
 	yp_test(".second[2].abc",            "null");
 	yp_test(".second[0:2].abc",          "[&anc [1, 2], [3, 4]]");
 	yp_test(".second[0].z",              "*anc");
@@ -248,6 +255,7 @@ int main (int argc, char *argv[])
 	yp_test(".second[:]['abc','q']",     "[{'abc': &anc [1, 2], 'q': 'Q'}, {'abc': [3, 4]}]");
 	yp_test(".second[:]['abc','def'][:]","[{'abc': &anc [1, 2], 'def': [11, 22]}, {'abc': [3, 4], 'def': null}]");
 	yp_test(".second[0]['abc','def']",   "{'abc': &anc [1, 2], 'def': [11, 22]}");
+	yp_test(".3rd[:].*.*[:]",            "[{'a': {'A': [0, 1], 'AA': [2, 3]}, 'b': {'A': [10, 11], 'BB': [9, 8]}}, {'z': {'A': [0, 1], 'BB': [22, 33]}}, &x {'q': null}]");
 
 	return test_result;
 }
